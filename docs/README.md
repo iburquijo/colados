@@ -23,7 +23,7 @@ la ubicación y *después*, si se acordaba, la pasaba al ordenador. El resultado
 - Latencia: el sistema informático refleja el patio con horas de retraso, o nunca.
 
 El detalle completo del proceso *as-is*, sus puntos de dolor y qué se construyó en 2021
-está en [`docs/00-problema-original.md`](docs/00-problema-original.md).
+está en [`00-problema-original.md`](00-problema-original.md).
 
 ## 2. Qué es este proyecto
 
@@ -69,7 +69,7 @@ flowchart LR
 ```
 
 Detalle, alternativas descartadas y diagramas C4 en
-[`docs/02-arquitectura.md`](docs/02-arquitectura.md).
+[`02-arquitectura.md`](02-arquitectura.md).
 
 ## 4. Stack
 
@@ -89,21 +89,21 @@ Detalle, alternativas descartadas y diagramas C4 en
 
 | Documento | Contenido |
 |---|---|
-| [`docs/00-problema-original.md`](docs/00-problema-original.md) | Proceso *as-is*, puntos de dolor, qué se hizo en 2021 y por qué no valía |
-| [`docs/01-dominio.md`](docs/01-dominio.md) | Lenguaje ubicuo, entidades, máquina de estados de la bobina |
-| [`docs/02-arquitectura.md`](docs/02-arquitectura.md) | Componentes, C4, topología del patio, alternativas |
-| [`docs/03-contratos-eventos.md`](docs/03-contratos-eventos.md) | Topics MQTT/Kafka, esquemas JSON, idempotencia |
-| [`docs/04-simulador.md`](docs/04-simulador.md) | Modelo físico de la planta y modelo de ruido RFID |
-| [`docs/05-resolucion-ubicacion.md`](docs/05-resolucion-ubicacion.md) | El algoritmo central: de lecturas sucias a ubicación |
-| [`docs/06-roadmap.md`](docs/06-roadmap.md) | Fases de entrega |
-| [`docs/decisiones-abiertas.md`](docs/decisiones-abiertas.md) | Lo que aún no está decidido |
-| [`docs/adr/`](docs/adr/) | Registro de decisiones de arquitectura (ADR) |
+| [`00-problema-original.md`](00-problema-original.md) | Proceso *as-is*, puntos de dolor, qué se hizo en 2021 y por qué no valía |
+| [`01-dominio.md`](01-dominio.md) | Lenguaje ubicuo, entidades, máquina de estados de la bobina |
+| [`02-arquitectura.md`](02-arquitectura.md) | Componentes, C4, topología del patio, alternativas |
+| [`03-contratos-eventos.md`](03-contratos-eventos.md) | Topics MQTT/Kafka, esquemas JSON, idempotencia |
+| [`04-simulador.md`](04-simulador.md) | Modelo físico de la planta y modelo de ruido RFID |
+| [`05-resolucion-ubicacion.md`](05-resolucion-ubicacion.md) | El algoritmo central: de lecturas sucias a ubicación |
+| [`06-roadmap.md`](06-roadmap.md) | Fases de entrega |
+| [`decisiones-abiertas.md`](decisiones-abiertas.md) | Lo que aún no está decidido |
+| [`adr/`](adr/) | Registro de decisiones de arquitectura (ADR) |
 
 ## 6. Estado
 
 **Fase 0 — Diseño.** No hay código todavía. Este repositorio contiene, por ahora,
-la definición del problema y la arquitectura. Ver [`docs/06-roadmap.md`](docs/06-roadmap.md).
+la definición del problema y la arquitectura. Ver [`06-roadmap.md`](06-roadmap.md).
 
 ## 7. Licencia
 
-Ver [`LICENSE`](LICENSE).
+Ver [`LICENSE`](../LICENSE).
