@@ -38,8 +38,8 @@ Decisiones:
   que le faltaba al prototipo de ThingSpeak con polling.
 - **Mensaje retenido** en `/status`: quien se suscribe conoce el estado actual sin esperar.
 - El topic **incluye `readerId`**, así que no hace falta repetirlo en el payload...
-  pero se repite igualmente. Un mensaje debe ser interpretable fuera de su topic,
-  porque al pasar a Kafka el topic se pierde.
+  pero se repite igualmente. Un mensaje debe ser interpretable **fuera de su topic**,
+  porque en cuanto se guarda en una tabla o se reenvía, el topic desaparece.
 
 ### Payload `TagReadBatch`
 
@@ -142,31 +142,47 @@ el motor de resolución, no la ingesta.
 
 LWT configurado: `{"schema":"colados.readerstatus.v1","readerId":"...","status":"OFFLINE"}`.
 
-## 3. Topics Kafka
+## 3. Flujos internos y almacenamiento
 
-| Topic | Clave | Particiones | Retención | Contenido |
-|---|---|---|---|---|
-| `rfid.reads.raw` | `readerId` | 6 | 7 d | Lecturas validadas, desagregadas del lote |
-| `rfid.observations` | `readerId` | 6 | 30 d | Observaciones con intervalo, EPC clasificado |
-| `coil.events` | `coilId` | 6 | **infinita** | Eventos de dominio — el libro mayor |
-| `coil.state` | `coilId` | 6 | **compactado** | Último estado conocido por bobina |
-| `yard.slot.state` | `slotId` | 6 | compactado | Ocupación por hueco |
-| `alerts` | `alertType` | 3 | 90 d | Alertas |
-| `dlq.rfid.reads` | `readerId` | 1 | 90 d | Lecturas rechazadas + motivo |
+Sin Kafka ([ADR-0011](adr/0011-sin-kafka-de-momento.md)), lo que en otra arquitectura
+serían topics aquí son tablas y eventos en proceso. Se documentan igualmente con su
+**clave de agrupación**, porque es una decisión de arquitectura y porque es lo que haría
+viable meter un broker más adelante sin rehacer el modelo.
+
+| Flujo | Clave | Dónde vive | Retención |
+|---|---|---|---|
+| Lecturas crudas | `readerId` | tabla `raw_read`, particionada por día | 7 d |
+| Observaciones | `readerId` | tabla `observation` | larga |
+| Eventos de dominio | `coilId` | tabla `coil_event`, append-only | **infinita** |
+| Estado por bobina | `coilId` | proyección `coil_location` | actual |
+| Ocupación por hueco | `slotId` | proyección `slot_occupancy` | actual |
+| Alertas | `alertType` | tabla `alert` | 90 d |
+| Rechazos | `readerId` | tabla `rejected_read` **con motivo** | 90 d |
 
 Notas:
 
-- **`coil.events` con retención infinita** es la decisión que sostiene el replay.
+- **`coil_event` con retención infinita** es lo que sostiene la trazabilidad y el replay.
   Es un log de auditoría: qué se supo, cuándo se supo y por qué se dedujo.
-- **Topics compactados** para el estado: un consumidor nuevo (o el frontend al
-  arrancar) reconstruye la foto completa del patio leyendo el topic desde el principio,
-  sin tocar la base de datos.
-- **La DLQ guarda el motivo**, no solo el mensaje. Una DLQ sin diagnóstico es un
-  cementerio.
-- **La clave de los topics de lectura es `readerId`, no `epc`.** Con el lector embarcado
-  en la máquina, el razonamiento es "todo lo que ve una máquina": el tag de la bobina y
-  los tags de ubicación deben llegar juntos y en orden al mismo procesador. Particionar
-  por `epc` los separaría y rompería la correlación entre el depósito y el hueco.
+- **La clave de las lecturas es `readerId`, no `epc`.** Con el lector embarcado en la
+  máquina, el razonamiento es "todo lo que ve una máquina": el tag de la bobina y los
+  tags de ubicación deben procesarse juntos y en orden. Agruparlos por `epc` rompería la
+  correlación entre el depósito y el hueco.
+- **Los rechazos guardan el motivo**, no solo el mensaje. Una cola de rechazos sin
+  diagnóstico es un cementerio.
+- `raw_read` se particiona por día y se tiran las particiones viejas. A ~13 millones de
+  filas y ~1 GB diarios, siete días son ~7 GB: nada para Postgres.
+
+### Entrega entre módulos
+
+El fan-out lo hace `ApplicationEventPublisher` de Spring, en proceso y dentro de la
+transacción del productor. Reglas que lo mantienen sano:
+
+1. **Un módulo nunca llama a otro por método**, solo publica hechos. Verificado con
+   ArchUnit ([ADR-0003](adr/0003-monolito-modular.md)).
+2. **Los consumidores son idempotentes**: `upsert` por clave y `last_processed_event_id`.
+   Es lo que hace seguro el replay.
+3. **`LISTEN/NOTIFY` no se usa como transporte.** Pierde mensajes si no hay oyente
+   conectado. Sirve como aviso para refrescar, nunca para entregar el evento.
 
 ## 4. Eventos de dominio
 
@@ -226,7 +242,7 @@ Tres tipos de duplicado, con tres tratamientos distintos. Confundirlos es un err
 |---|---|---|
 | **De transporte** | MQTT QoS 1 reenvía el lote | Deduplicar por `(readerId, batchSeq)` en `ingest`. Se descarta el lote entero. |
 | **De lectura** | El tag se lee 20 veces/s por la misma antena | **No se descarta**: es señal legítima. Se agrega en ventana en `tracking`. La frecuencia de lectura *es información* (cerca vs lejos). |
-| **De reproceso** | Replay deliberado desde Kafka | Se procesa normalmente contra proyecciones idempotentes (upsert por clave). |
+| **De reproceso** | Replay deliberado desde `raw_read` o `coil_event` | Se procesa normalmente contra proyecciones idempotentes (upsert por clave). |
 
 El segundo caso es donde se equivoca casi todo el mundo: filtrar lecturas repetidas
 en la ingesta parece limpieza y en realidad tira la señal que necesitas para

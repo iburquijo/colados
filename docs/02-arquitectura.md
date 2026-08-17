@@ -41,47 +41,47 @@ flowchart TB
         SIM["<b>colados-simulator</b><br/>Spring Boot<br/>planta virtual + modelo de ruido"]
     end
 
-    subgraph MSG["Mensajería"]
-        MQ["<b>Mosquitto</b><br/>broker MQTT<br/>QoS 1, LWT"]
-        KFK["<b>Kafka</b> (KRaft)<br/>log de eventos<br/>+ Schema Registry"]
-    end
+    MQ["<b>Mosquitto</b><br/>broker MQTT<br/>QoS 1, LWT"]
 
     subgraph BE["colados-backend (monolito modular, Spring Boot 3)"]
-        M1["módulo <b>ingest</b><br/>MQTT→Kafka, validación, dedupe"]
-        M2["módulo <b>tracking</b><br/>resolución de ubicación<br/>máquina de estados"]
-        M3["módulo <b>inventory</b><br/>stock, sobrantes, reservas"]
+        M1["módulo <b>ingest</b><br/>MQTT, validación, dedupe<br/>colapso en observaciones"]
+        M2["módulo <b>tracking</b><br/>resolución de ubicación<br/>máquina de estados de la carga"]
+        M3["módulo <b>inventory</b><br/>stock, sobrantes, reservas<br/>inventario con lector de mano"]
         M4["módulo <b>shipping</b><br/>pedidos, cargas, camiones"]
         M5["módulo <b>api</b><br/>REST + WebSocket"]
         M6["módulo <b>alerting</b><br/>invariantes + salud de lectores"]
     end
 
-    PG[("<b>PostgreSQL</b><br/>hechos + proyecciones")]
+    PG[("<b>PostgreSQL</b><br/>lecturas, observaciones,<br/>log de eventos y proyecciones")]
     WEB["<b>colados-web</b><br/>Next.js + TypeScript"]
     OBS["Prometheus + Grafana"]
 
-    SIM -->|MQTT| MQ
+    SIM -->|"MQTT: lotes de lectura"| MQ
     MQ --> M1
-    M1 -->|"rfid.reads.raw"| KFK
-    KFK --> M2
-    M2 -->|"coil.events"| KFK
-    KFK --> M3
-    KFK --> M4
-    KFK --> M6
+    M1 -->|"eventos en proceso"| M2
+    M2 -->|"eventos en proceso"| M3
+    M2 --> M4
+    M2 --> M6
+    M1 --> PG
     M2 --> PG
     M3 --> PG
     M4 --> PG
     M5 --> PG
-    KFK --> M5
+    M2 -->|"eventos en proceso"| M5
     M5 <-->|"REST + WebSocket"| WEB
     BE --> OBS
     MQ --> OBS
 ```
 
-### Por qué el módulo `ingest` no es un simple bridge
+**No hay Kafka** ([ADR-0011](adr/0011-sin-kafka-de-momento.md)). Con ~300 lecturas/s en
+punta, 7 claves de partición y ~600 eventos de dominio al día, ningún argumento técnico
+lo sostenía. PostgreSQL hace de log de eventos y el fan-out entre módulos es en proceso.
+La puerta queda abierta: los esquemas van versionados y las claves de partición están
+decididas, así que migrar sería añadir un productor, no reescribir el modelo.
 
-Existen puentes MQTT→Kafka de estantería (Kafka Connect, el bridge nativo de EMQX).
-Se descarta usarlos como única pieza porque queremos una **puerta de calidad** en
-la entrada, y esa puerta es parte del aprendizaje:
+### Por qué `ingest` es una puerta de calidad, no un simple volcado
+
+`ingest` no se limita a copiar el mensaje MQTT a una tabla:
 
 - **Validación de esquema**: una lectura malformada va a la DLQ, no rompe el consumidor.
 - **Idempotencia**: `(readerId, batchSeq)` como clave; MQTT QoS 1 garantiza
@@ -90,77 +90,81 @@ la entrada, y esa puerta es parte del aprendizaje:
 - **Enriquecimiento mínimo**: se añade `plantId`, `receivedAt`, `traceId`.
 - **Clasificación del EPC**: contra el registro de tags, un EPC leído es de bobina, de
   ubicación o desconocido. El lector no lo sabe; aquí se decide.
-- **Particionado consciente**: clave de Kafka = `readerId` de la máquina. Es la decisión
-  que cambia con [ADR-0010](adr/0010-lector-en-la-maquina.md): el razonamiento ya no es
-  "todo lo que se sabe de una bobina", sino **"todo lo que ve una máquina"** — el tag de
-  la bobina y los de ubicación tienen que llegar juntos y en orden al mismo procesador,
-  o no se puede correlacionar el depósito con el hueco.
+- **Agrupación consciente por `readerId`**: el razonamiento del motor de resolución es
+  "todo lo que ve una máquina" — el tag de la bobina y los tags de ubicación tienen que
+  llegar juntos y en orden al mismo procesador, o no se puede correlacionar el depósito
+  con el hueco.
 
-Ojo con lo último: particionar por `epc`, que era lo natural con antenas fijas, aquí
-**rompe el algoritmo**, porque separa el tag de la bobina de los tags de ubicación que
-le dan sentido. La clave de partición **es** una decisión de arquitectura, y cambia con
-la topología de lectores.
+Hoy ese `readerId` es solo un índice, pero está documentado como **clave de partición**
+por si algún día entra un broker ([ADR-0011](adr/0011-sin-kafka-de-momento.md)).
+Conviene saber que agrupar por `epc`, que era lo natural con antenas fijas, aquí
+**rompería el algoritmo**: separaría el tag de la bobina de los tags de ubicación que le
+dan sentido.
 
 ## 4. Flujo de eventos: quién publica, quién consume, quién persiste
 
 El diagrama anterior dice qué piezas hay, pero no quién habla con quién en cada salto.
 Esto es lo concreto.
 
-### Fases 1 y 2 (sin Kafka)
-
 | Salto | Transporte | Publica | Consume | Se persiste en |
 |---|---|---|---|---|
-| `TagReadBatch` | **MQTT** `colados/PLANT-01/reader/+/reads` | simulador (lectores de máquina, portal y mano) | `ingest` | tabla `raw_read`, 48 h |
-| `Observation` | **en proceso** (`ApplicationEventPublisher`) | `ingest` | `tracking` | tabla `observation` |
-| `CoilPlaced`, `CoilMissing`… | **en proceso** | `tracking` | `inventory`, `alerting`, `api` | tabla `coil_event` |
+| `TagReadBatch` | **MQTT** `colados/PLANT-01/reader/+/reads` | simulador (lectores de máquina, portal y mano) | `ingest` | `raw_read`, 7 d |
+| `Observation` | **en proceso** (`ApplicationEventPublisher`) | `ingest` | `tracking` | `observation` |
+| `CoilPickedUp`, `CoilPlaced`… | **en proceso** | `tracking` | `inventory`, `shipping`, `alerting`, `api` | `coil_event` |
 | cambio de ubicación | **WebSocket/STOMP** | `api` | navegador | — |
 
-Solo el primer salto es red de verdad. Los intermedios son llamadas Spring dentro del
-mismo proceso, y **quien produce el evento es quien lo persiste**, en la misma
-transacción. Es simple y es correcto para un único despliegue.
+**Solo el primer salto es red de verdad.** Los intermedios son llamadas Spring dentro
+del mismo proceso.
 
-Lo que se persiste **antes** de razonar: `ingest` guarda el lote antes de interpretarlo.
-Si el motor de resolución revienta, el dato está a salvo y se reprocesa.
+Tres propiedades que hay que respetar y que no son gratis solo por ser en proceso:
 
-### Fase 3 (con Kafka)
+- **Se persiste antes de razonar.** `ingest` guarda el lote antes de interpretarlo. Si
+  el motor de resolución revienta, el dato está a salvo y se reprocesa.
+- **Evento y proyección, en la misma transacción.** `tracking` escribe `coil_event` y
+  actualiza `coil_location` y `slot_occupancy` atómicamente. **No existe el problema de
+  la escritura dual**: no hay dos almacenes que puedan divergir. Es la simplificación
+  más valiosa de haber quitado Kafka, y la razón de que no haga falta un componente
+  `projector` aparte.
+- **Los módulos se hablan por eventos, no por método.** Aunque el transporte sea una
+  llamada en proceso, `tracking` no invoca a `inventory`: publica un hecho. Esa
+  disciplina es lo que mantendría viable extraer un módulo o meter un broker más
+  adelante, y la imponen los tests de ArchUnit
+  ([ADR-0003](adr/0003-monolito-modular.md)), no la buena voluntad.
 
+### Replay y reconstrucción
+
+Sin Kafka, el replay es SQL por lotes:
+
+```sql
+-- Reconstruir proyecciones desde cero
+TRUNCATE coil_location, slot_occupancy, stock_summary;
+-- reproducir coil_event en orden y volver a aplicar cada evento
+SELECT * FROM coil_event ORDER BY id;
+
+-- Reprocesar desde las lecturas con un algoritmo corregido
+SELECT * FROM raw_read WHERE read_at >= ? ORDER BY reader_id, read_at;
 ```
-simulador --MQTT--> ingest --> rfid.reads.raw --> [colapso] --> rfid.observations
-                                                                      |
-                                                             tracking (Kafka Streams)
-                                                                      |
-                                                                 coil.events
-                                                                      |
-                                    +-----------+-----------+---------+
-                                    |           |           |         |
-                                projector   inventory   alerting     api
-                                    |                                 |
-                                PostgreSQL                        WebSocket
-```
 
-El cambio que importa: **`tracking` deja de escribir en la base de datos.** Solo publica
-en Kafka. Aparece un consumidor nuevo, el **projector**, cuyo único trabajo es leer
-`coil.events` y escribir `coil_event` y las proyecciones.
+Menos elegante que reposicionar un offset, pero la capacidad es la misma. Las
+proyecciones se actualizan con `upsert` por clave, así que reproducir dos veces el mismo
+evento da el mismo resultado: **el replay es seguro porque los consumidores son
+idempotentes**, no porque lo garantice la infraestructura.
 
-Se separa por una razón concreta: si `tracking` escribiera en Kafka **y** en Postgres
-tendría una **escritura dual sin atomicidad**. Si el commit de Kafka va bien y el de
-Postgres falla, los dos almacenes divergen para siempre y nadie se entera. Las salidas
-son el patrón *transactional outbox* o —más simple— que Kafka sea la única fuente de
-verdad y la base de datos sea puramente derivada. Se elige lo segundo, y es
-precisamente lo que convierte "borrar las proyecciones y reconstruirlas" en una
-operación rutinaria.
+`./gradlew rebuildProjections` hace la reconstrucción completa y **se ejecuta en CI**:
+una reconstrucción que solo funciona en teoría no funciona.
 
 ### Dónde vive cada dato
 
-Resumen de [ADR-0009](adr/0009-estrategia-de-almacenamiento.md):
+Resumen de [ADR-0009](adr/0009-estrategia-de-almacenamiento.md) y
+[ADR-0011](adr/0011-sin-kafka-de-momento.md):
 
-| Dato | Dónde | Responde a |
-|---|---|---|
-| Lecturas crudas | Kafka, 7 d | "¿Por qué el sistema creyó eso a las 09:14?" |
-| Observaciones | PostgreSQL | "¿Qué lector vio este tag, cuándo y cuánto tiempo?" |
-| Eventos de dominio | PostgreSQL, infinita | "¿Qué le pasó a la bobina 4471?" |
-| Proyecciones | PostgreSQL | "¿Dónde está ahora?" |
-| Métricas | Prometheus | "¿Cuántas lecturas/s da el lector de la carretilla 2?" |
+| Dato | Dónde | Retención | Responde a |
+|---|---|---|---|
+| Lecturas crudas | `raw_read`, particionada por día | 7 d | "¿Por qué el sistema creyó que la dejó en C5-08?" |
+| Observaciones | `observation` | larga | "¿Qué lector vio este tag, cuándo y cuánto tiempo?" |
+| Eventos de dominio | `coil_event` | **infinita** | "¿Qué le pasó a la bobina 4471?" |
+| Proyecciones | `coil_location`, `slot_occupancy`… | actual | "¿Dónde está ahora?" |
+| Métricas | Prometheus | 15 d | "¿Cuántas lecturas/s da el lector de la carretilla 2?" |
 
 Mosquitto **no aparece en esta tabla**: reparte y olvida, no almacena nada.
 
@@ -254,8 +258,8 @@ Topics de suscripción:
 
 Sin esto no se puede razonar sobre un sistema de eventos:
 
-- **Métricas**: lecturas/s por lector, ratio de descarte, lag de consumidor Kafka,
-  latencia depósito→ubicación resuelta (p50/p95/p99), bobinas en `LOCATION_UNKNOWN` y
+- **Métricas**: lecturas/s por lector, ratio de descarte, profundidad de la cola de
+  ingesta, latencia depósito→ubicación resuelta (p50/p95/p99), bobinas en `LOCATION_UNKNOWN` y
   `STALE`, antigüedad media de la última confirmación.
 - **Trazas**: `traceId` propagado desde la lectura MQTT hasta el mensaje WebSocket.
   Poder seguir *una* lectura por todo el sistema es lo que hace depurable esto.
@@ -269,10 +273,10 @@ Sin esto no se puede razonar sobre un sistema de eventos:
 
 | Alternativa | Por qué no |
 |---|---|
-| Solo MQTT + Postgres, sin Kafka | Suficiente para funcionar, pero se pierde el replay, que es el mayor valor didáctico y práctico. Se mantiene como plan B si Kafka lastra el desarrollo (ver ADR-0002). |
+| Kafka como backbone | Era la decisión hasta [ADR-0011](adr/0011-sin-kafka-de-momento.md). Con ~300 lecturas/s, 7 claves de partición y 4 entradas de estado, ningún argumento técnico se sostiene. Queda como migración opcional. |
 | Solo Kafka, sin MQTT | Kafka no es un protocolo de campo: no hay clientes en microcontroladores, ni QoS por mensaje, ni Last Will. Perdería el realismo industrial. |
-| RabbitMQ en lugar de ambos | Buena cola, mal log. Sin retención larga ni replay ni reproceso desde offset. |
-| Redis Streams | Ligero y con consumer groups, pero la retención y el ecosistema de stream processing quedan cortos. |
+| RabbitMQ | Cola, no log. No aporta replay. |
+| `LISTEN/NOTIFY` como transporte de eventos | Pierde mensajes si no hay oyente conectado en ese instante. Sirve como aviso para refrescar, nunca como transporte. |
 | Microservicios desde el día 1 | Coste operativo desproporcionado para un proyecto personal; las fronteras del dominio aún no están estabilizadas. |
 | Event sourcing puro (sin tablas de estado) | Consultas de stock y mapa de patio se vuelven costosas. Se opta por híbrido (ADR-0004). |
 | MongoDB | Los invariantes del dominio son relacionales (ocupación de huecos, reservas). Postgres con `jsonb` cubre la parte flexible. |
@@ -295,7 +299,8 @@ colados/
 │   └── api/
 ├── contracts/          esquemas de eventos compartidos (fuente de verdad)
 ├── web/                Next.js
-├── infra/              docker-compose, configuración Mosquitto/Kafka, dashboards Grafana
+├── infra/              docker-compose, configuración Mosquitto, plant-layout.yaml,
+│                       dashboards Grafana
 └── tools/              generación de datos, scripts de evaluación
 ```
 

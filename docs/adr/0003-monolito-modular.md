@@ -23,7 +23,8 @@ explícitas. El simulador sí es un proceso aparte, por motivos de diseño
    no con una migración de despliegue.
 2. **El proyecto ya enseña lo que interesa.** El aprendizaje que se busca es
    arquitectura orientada a eventos, ingesta de datos sucios y tiempo real. Nada de
-   eso requiere separar procesos: los eventos van por MQTT y Kafka igualmente.
+   eso requiere separar procesos: la ingesta va por MQTT y el log de eventos vive en
+   PostgreSQL igualmente.
 3. **Coste operativo.** Seis servicios significan seis pipelines, seis imágenes, seis
    configuraciones y descubrimiento de servicios. En un proyecto personal eso es
    tiempo que no se dedica al problema interesante.
@@ -55,7 +56,7 @@ es una tarde de trabajo. Si no se cumplen, ningún despliegue separado va a salv
 Se extraería un módulo a servicio independiente si:
 
 - `ingest` necesita escalar horizontalmente por volumen de lecturas, o
-- `tracking` con Kafka Streams necesita su propio ciclo de despliegue y estado, o
+- `tracking` necesita su propio ciclo de despliegue y estado, o
 - un módulo tiene un perfil de recursos radicalmente distinto al resto.
 
 `ingest` y `tracking` son los candidatos naturales, en ese orden.

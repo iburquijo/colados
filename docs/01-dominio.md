@@ -163,8 +163,9 @@ inventory_reading(id, sweep_id, slot_id, epc, read_at, outcome)
 `first_seen` / `last_seen` vienen del reloj **del lector** y `recorded_at` del servidor:
 el desfase de reloj es un fenómeno real y hay que poder medirlo, no ocultarlo.
 
-Las lecturas crudas de las que salen estas observaciones **no se guardan aquí**: viven
-en Kafka con 7 días de retención ([ADR-0009](adr/0009-estrategia-de-almacenamiento.md)).
+Las lecturas crudas de las que salen estas observaciones viven en `raw_read`,
+particionada por día y con 7 días de retención
+([ADR-0011](adr/0011-sin-kafka-de-momento.md)).
 
 ### Proyecciones (derivadas, reconstruibles desde los hechos)
 
@@ -177,5 +178,6 @@ reader_health(reader_id, last_heartbeat, reads_last_5m, status)
 ```
 
 **Cualquier proyección se puede borrar y reconstruir** reproduciendo los hechos.
-Ese es todo el sentido de la separación y la razón principal para meter Kafka
-(ver [ADR-0002](adr/0002-kafka-como-backbone.md)).
+Ese es todo el sentido de la separación: un `TRUNCATE` y una lectura ordenada de
+`coil_event` devuelven el patio a su estado correcto
+([ADR-0011](adr/0011-sin-kafka-de-momento.md)).

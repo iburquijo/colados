@@ -49,7 +49,7 @@ como protocolo entre los dispositivos de campo y la plataforma.
 hardware real sin tocar el backend.
 
 **Negativas:** una pieza de infraestructura más que operar; MQTT no retiene histórico
-(por eso hace falta Kafka o la base de datos detrás — ver [ADR-0002](0002-kafka-como-backbone.md));
+(por eso hace falta la base de datos detrás — ver [ADR-0011](0011-sin-kafka-de-momento.md));
 sin esquemas nativos, la validación hay que hacerla en la ingesta.
 
 **Riesgo asumido:** QoS 1 es *at-least-once*, así que **habrá duplicados**. La

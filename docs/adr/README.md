@@ -12,7 +12,7 @@ escribe uno nuevo que lo reemplaza.
 | # | Decisión | Estado |
 |---|---|---|
 | [0001](0001-mqtt-como-protocolo-de-campo.md) | MQTT como protocolo de campo | Aceptado |
-| [0002](0002-kafka-como-backbone.md) | Kafka como backbone de eventos (desde fase 3) | Aceptado, diferido |
+| [0002](0002-kafka-como-backbone.md) | ~~Kafka como backbone de eventos~~ | Sustituido por 0011 |
 | [0003](0003-monolito-modular.md) | Monolito modular, no microservicios | Aceptado |
 | [0004](0004-event-sourcing-hibrido.md) | Event sourcing híbrido: hechos + proyecciones | Aceptado |
 | [0005](0005-stack-backend-y-frontend.md) | Spring Boot + Next.js | Aceptado |
@@ -21,6 +21,7 @@ escribe uno nuevo que lo reemplaza.
 | [0008](0008-lotes-y-observaciones.md) | Lotes de lectura y colapso en observaciones | Aceptado |
 | [0009](0009-estrategia-de-almacenamiento.md) | Cada tipo de dato en su sitio | Aceptado |
 | [0010](0010-lector-en-la-maquina.md) | **El lector viaja con la máquina, no con el patio** | Aceptado |
+| [0011](0011-sin-kafka-de-momento.md) | Sin Kafka: PostgreSQL como log de eventos | Aceptado |
 
 ## Estados
 

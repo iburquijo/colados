@@ -16,9 +16,10 @@ Consecuencias directas ya aplicadas:
 
 - Simulador en **Java + Spring Boot** ([ADR-0007](adr/0007-tecnologia-del-simulador.md)):
   es un medio para generar entrada realista, no el objeto de estudio.
-- **Kafka en la fase 3** ([ADR-0002](adr/0002-kafka-como-backbone.md)), no antes: se
-  introduce cuando haya dominio que reprocesar y el replay se pueda demostrar de verdad.
-  La fase 3 es el corazón del proyecto, no un extra.
+- **Sin Kafka** ([ADR-0011](adr/0011-sin-kafka-de-momento.md)): tras cambiar la
+  topología de lectores, ningún argumento técnico lo sostenía. PostgreSQL hace de log de
+  eventos. Queda como migración opcional en la fase 6, con disparadores concretos
+  escritos para reabrir la decisión.
 - El modelo RF y el motor de resolución se quedan en heurística bien medida; nada de
   filtros bayesianos hasta que todo lo demás funcione.
 
@@ -41,8 +42,9 @@ Va desde "distancia < X → lee" hasta un modelo de propagación con multitrayec
 
 **Recomendación:** empezar por *path loss* logarítmico con ruido gaussiano y curva
 sigmoide de probabilidad de lectura. Es suficiente para generar ambigüedad realista.
-El multitrayecto se simula con la perilla `phantomRate` en vez de modelarlo
-físicamente — el efecto es el mismo y el coste, mucho menor.
+El multitrayecto y las lecturas cruzadas se simulan con perillas
+(`crossMachineReadRate`, `locationTagUnreadableRate`) en vez de modelarlos físicamente:
+el efecto es el mismo y el coste, mucho menor.
 
 ---
 
@@ -68,7 +70,7 @@ reservas), `ADMIN` (datos maestros, simulador).
 
 ## 5. Datos maestros: ¿cómo se cargan?
 
-Zonas, calles, huecos, lectores, antenas, máquinas.
+Zonas, calles, huecos, **tags de ubicación** (el mapa EPC→hueco), lectores y máquinas.
 
 **Recomendación:** definición declarativa en YAML (`infra/plant-layout.yaml`),
 compartida por el simulador y el backend. El simulador la usa para la geometría
@@ -94,13 +96,18 @@ proyecto, y el nombre ya está.
 ¿Cuántas lecturas por segundo debe aguantar? Determina si hay que preocuparse de
 particionado y rendimiento.
 
-**Estimación con los parámetros por defecto:** ~300 bobinas activas × ~2 antenas que
-las ven × ~10 lecturas/s ≈ **6.000 lecturas/s**, que agrupadas en lotes de 200 ms son
-solo ~150 mensajes MQTT/s ([ADR-0008](adr/0008-lotes-y-observaciones.md)).
+**Estimación con los parámetros por defecto:** ~80 lecturas/s por máquina activa,
+**~300/s en punta** con las cuatro trabajando y **cero cuando están paradas**. Agrupadas
+en lotes de 200 ms son ~20 mensajes MQTT/s
+([ADR-0008](adr/0008-lotes-y-observaciones.md),
+[ADR-0010](adr/0010-lector-en-la-maquina.md)).
 
-Ese cambio desactivó el problema de almacenamiento, pero no el de proceso: el motor de
-resolución sigue viendo 6.000 lecturas/s. Y el modo acelerado ×1000 no es viable con
-lecturas completas: necesitará submuestreo.
+Con esas cifras no hay problema de volumen: ni de almacenamiento (~1 GB/día) ni de
+proceso. Es lo que dejó a Kafka sin justificación
+([ADR-0011](adr/0011-sin-kafka-de-momento.md)).
 
-**Decisión pendiente:** fijar un objetivo (¿5.000 lecturas/s procesadas?) y medirlo en
-la fase 5.
+Lo que sí sigue apretando es el **modo acelerado**: a ×1000 no es viable generar todas
+las lecturas y necesitará submuestreo.
+
+**Decisión pendiente:** fijar un objetivo (¿2.000 lecturas/s procesadas, con margen ×6
+sobre la punta?) y medirlo en la fase 5.

@@ -15,7 +15,8 @@ lo hecho hasta ahí tiene valor por sí solo.
 - [x] Diseño del simulador y del motor de resolución
 - [x] Fijar el objetivo de aprendizaje: **arquitectura orientada a eventos**
 - [x] Simulador en Java + Spring Boot ([ADR-0007](adr/0007-tecnologia-del-simulador.md))
-- [x] Kafka en la fase 3, no antes ([ADR-0002](adr/0002-kafka-como-backbone.md))
+- [x] Sin Kafka: PostgreSQL como log de eventos ([ADR-0011](adr/0011-sin-kafka-de-momento.md))
+- [x] Lector embarcado en la máquina + tags de ubicación ([ADR-0010](adr/0010-lector-en-la-maquina.md))
 - [ ] Decisiones abiertas restantes ([`decisiones-abiertas.md`](decisiones-abiertas.md)) — ninguna bloquea la fase 1
 
 **Entregable:** este repositorio de documentación.
@@ -24,7 +25,7 @@ lo hecho hasta ahí tiene valor por sí solo.
 
 ## Fase 1 — El bucle mínimo que funciona
 
-Objetivo: una lectura simulada llega al navegador. Sin Kafka todavía.
+Objetivo: una lectura simulada llega al navegador.
 
 - `infra/`: Docker Compose con Mosquitto y PostgreSQL
 - `contracts/`: esquema `TagReadBatch` v1 + generación de tipos Java/TS
@@ -59,23 +60,26 @@ Si solo se llega hasta aquí, el proyecto está justificado.
 
 ---
 
-## Fase 3 — Kafka y el replay ⭐
+## Fase 3 — Reproducibilidad y evaluación ⭐
 
-**El corazón del proyecto**, dado que el objetivo de aprendizaje es la arquitectura
-orientada a eventos. Las fases 1 y 2 construyen el dominio que esta fase hace
-reproducible y auditable; las fases 4 y 5 lo visten. Si hay que apretar en algún
-sitio, es aquí.
+**El corazón del proyecto.** Las fases 1 y 2 construyen el dominio; esta lo hace
+reproducible, auditable y **medible**. Si hay que apretar en algún sitio, es aquí.
 
-- Kafka (KRaft) + Schema Registry en el Compose
-- `ingest` publica en `rfid.reads.raw`; `tracking` pasa a Kafka Streams
-- `coil.events` con retención infinita; topics compactados de estado
-- **Reconstrucción de proyecciones desde cero por replay** ← el hito de la fase
-- DLQ con motivo
-- Consola del simulador en la web (velocidad, ruido, escenarios)
+- **Reconstrucción de proyecciones desde cero** (`rebuildProjections`) ← el hito de la
+  fase, y se ejecuta en CI: una reconstrucción que solo funciona en teoría no funciona
+- Reproceso desde `raw_read` con un algoritmo corregido, y **eventos de corrección**
+  en lugar de modificar el histórico
+- Arnés de evaluación contra `sim/groundtruth`: precisión de ubicación, error de
+  vecindad, latencia de convergencia, deriva acumulada
+- **Comparación de algoritmos**: misma traza, dos resolutores, dos precisiones
+- Barrido de parámetros, empezando por `T_gone`, que es el que más pesa
+- Test de regresión de precisión en CI
+- Consola del simulador en la web (velocidad, perillas de ruido, escenarios)
+- Cola de rechazos con motivo
 
-**Entregable demostrable:** borrar las tablas de proyección, relanzar el replay y ver
-el patio reconstruirse solo. Y: cambiar un parámetro del algoritmo, reprocesar la
-misma historia y **comparar precisiones**. Eso es lo que Kafka compra aquí.
+**Entregable demostrable:** borrar las tablas de proyección, relanzar la reconstrucción
+y ver el patio rehacerse solo. Y una gráfica de precisión frente a ruido que convierte
+"parece que funciona" en un número defendible.
 
 ---
 
@@ -99,7 +103,8 @@ misma historia y **comparar precisiones**. Eso es lo que Kafka compra aquí.
 
 - Observabilidad: Prometheus, Grafana, trazas OpenTelemetry de extremo a extremo
 - Autenticación con Keycloak: roles operario / supervisor / admin
-- Tests de carga: ¿cuántas lecturas/s aguanta antes de acumular lag?
+- Tests de carga: ¿cuántas lecturas/s aguanta antes de que el `INSERT` sea el cuello
+  de botella? El disparador de [ADR-0011](adr/0011-sin-kafka-de-momento.md) son ~10.000/s
 - CI en GitHub Actions, incluido el **test de regresión de precisión**
 - Despliegue: Kubernetes o un VPS con Compose (por decidir)
 
@@ -109,6 +114,10 @@ misma historia y **comparar precisiones**. Eso es lo que Kafka compra aquí.
 
 Ninguno necesario; todos interesantes:
 
+- **Migrar a Kafka**: sustituir el log en Postgres por un broker, ya con el dominio
+  funcionando. Migrar un sistema que anda enseña más que construirlo con Kafka desde el
+  principio, y los disparadores para hacerlo están escritos en
+  [ADR-0011](adr/0011-sin-kafka-de-momento.md).
 - **Hardware real**: un ESP32 + lector RC522/UHF publicando en el mismo topic MQTT.
   El backend no distingue si el `TagReadBatch` viene del simulador o de un lector físico
   — que sea así es la prueba de que la frontera del simulador estaba bien puesta.
@@ -127,5 +136,5 @@ Escrito para no perder el tiempo más adelante:
 - Integración real con un ERP.
 - Multiplanta / multitenancy.
 - Microservicios separados salvo que un módulo lo pida a gritos.
-- Alta disponibilidad real (Kafka replicado, Postgres en HA).
+- Alta disponibilidad real (Postgres en HA).
 - App móvil nativa.

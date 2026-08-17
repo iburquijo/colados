@@ -1,7 +1,12 @@
 # 05 — Resolución de ubicación: de lecturas sucias a inventario
 
-Este es el núcleo del proyecto. Todo lo demás (MQTT, Kafka, Spring, Next.js) es
+Este es el núcleo del proyecto. Todo lo demás (MQTT, Spring, PostgreSQL, Next.js) es
 infraestructura al servicio de este módulo.
+
+Se implementa como un **consumidor con estado en memoria**: una máquina de estados por
+lector de máquina. Son cuatro entradas, reconstruibles releyendo el último minuto de
+`raw_read` tras un reinicio — por eso no hace falta un motor de *streaming*
+([ADR-0011](adr/0011-sin-kafka-de-momento.md)).
 
 Parte de la arquitectura de [ADR-0010](adr/0010-lector-en-la-maquina.md): el lector va
 embarcado en la máquina y lee dos tipos de tag —el de la bobina que transporta y los de
@@ -179,7 +184,7 @@ corte) no se tiran:
 |---|---|
 | Unitario | Máquina de estados de la carga y puntuación de candidatos con secuencias sintéticas |
 | Propiedad | Invariantes del dominio bajo entradas aleatorias (jqwik) |
-| Integración | Testcontainers: Mosquitto + Kafka + Postgres reales |
+| Integración | Testcontainers: Mosquitto + Postgres reales |
 | Aceptación | Escenarios del simulador con semilla fija → precisión esperada |
 | Regresión | Traza grabada; si un cambio baja la precisión, falla el build |
 
@@ -202,6 +207,8 @@ Los parámetros a barrer experimentalmente, en este orden de importancia:
 - **Trayectoria como contexto**: la secuencia de tags de ubicación dice por qué calle
   iba; un destino incoherente con la trayectoria es sospechoso.
 - **Filtro bayesiano** sobre la posición en lugar de puntuación heurística.
-- **Comparación de estrategias**: dos resolutores en paralelo sobre el mismo flujo,
-  comparando precisión. Con Kafka son dos *consumer groups* sobre el mismo topic. Este
-  es, concretamente, el argumento que justifica Kafka frente a "MQTT y ya está".
+- **Comparación de estrategias**: reprocesar la misma traza de `raw_read` con dos
+  resolutores distintos y comparar su precisión contra la verdad del simulador. Es una
+  ejecución por lotes; hacerlo sobre el flujo en vivo sí requeriría un broker con
+  consumer groups, y es uno de los disparadores para reabrir
+  [ADR-0011](adr/0011-sin-kafka-de-momento.md).

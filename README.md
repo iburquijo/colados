@@ -51,29 +51,25 @@ flowchart LR
     SIM["colados-simulator<br/>(planta virtual)"]
     MQTT["Mosquitto<br/>(broker MQTT)"]
     ING["Ingesta<br/>valida, deduplica<br/>y colapsa en observaciones"]
-    K["Kafka<br/>(log de eventos)"]
     TRK["Tracking<br/>resolución de ubicación<br/>+ máquina de estados"]
-    PRJ["Projector"]
-    PG[("PostgreSQL<br/>observaciones, eventos<br/>y proyecciones")]
+    PG[("PostgreSQL<br/>lecturas, observaciones,<br/>log de eventos y proyecciones")]
     API["API REST + WebSocket"]
     WEB["colados-web<br/>(Next.js)"]
 
-    SIM -->|"lotes de lectura"| MQTT
+    SIM -->|"MQTT: lotes de lectura"| MQTT
     MQTT --> ING
-    ING -->|"rfid.reads.raw<br/>rfid.observations"| K
-    K --> TRK
-    TRK -->|"coil.events"| K
-    K --> PRJ
-    PRJ --> PG
+    ING -->|"observaciones<br/>(evento en proceso)"| TRK
+    ING --> PG
+    TRK -->|"eventos de dominio"| API
+    TRK --> PG
     API --> PG
-    K --> API
     API <-->|"WS"| WEB
 ```
 
-Las lecturas crudas se quedan en Kafka con 7 días de retención: **nunca llegan a la
-base de datos**. Y `tracking` no escribe en Postgres — solo publica en Kafka, y el
-*projector* es el único que persiste. Así se evita la escritura dual y las
-proyecciones se pueden reconstruir enteras desde el log.
+**Sin broker de eventos.** PostgreSQL hace de log: `raw_read` guarda las lecturas 7 días,
+`coil_event` es el libro mayor con retención infinita y las proyecciones se reconstruyen
+releyéndolo. Con ~300 lecturas/s en punta y ~600 eventos de negocio al día, Kafka no
+aportaba nada que justificara operarlo ([ADR-0011](docs/adr/0011-sin-kafka-de-momento.md)).
 
 Detalle, alternativas descartadas y diagramas C4 en
 [`docs/02-arquitectura.md`](docs/02-arquitectura.md).
@@ -85,9 +81,8 @@ Detalle, alternativas descartadas y diagramas C4 en
 | Simulador | Java 21 + Spring Boot | Mismo toolchain; aislado, solo habla MQTT |
 | Lectores | Embarcados en las máquinas + tags de ubicación por hueco | Lo que se hace en un patio real; el volumen crece con la actividad, no con el stock |
 | Transporte de campo | MQTT (Mosquitto) | Protocolo real de planta: QoS, LWT, ligero |
-| Backbone de eventos | Apache Kafka (KRaft) | Retención + **replay** + múltiples consumidores |
 | Backend | Java 21 + Spring Boot 3 (monolito modular) | Módulos con frontera limpia, un despliegue |
-| Persistencia | PostgreSQL 16 | Observaciones, event store y proyecciones |
+| Persistencia y log de eventos | PostgreSQL 16 | Lecturas, observaciones, `coil_event` append-only y proyecciones reconstruibles |
 | Frontend | Next.js + TypeScript + React | Mapa de patio en tiempo real |
 | Tiempo real → navegador | WebSocket (STOMP) | Empuje de cambios de ubicación |
 | Infra local | Docker Compose | Todo levanta con un comando |
@@ -100,7 +95,7 @@ Detalle, alternativas descartadas y diagramas C4 en
 | [`docs/00-problema-original.md`](docs/00-problema-original.md) | Proceso *as-is*, puntos de dolor, qué se hizo en 2021 y por qué no valía |
 | [`docs/01-dominio.md`](docs/01-dominio.md) | Lenguaje ubicuo, entidades, máquina de estados de la bobina |
 | [`docs/02-arquitectura.md`](docs/02-arquitectura.md) | Componentes, C4, topología del patio, alternativas |
-| [`docs/03-contratos-eventos.md`](docs/03-contratos-eventos.md) | Topics MQTT/Kafka, lotes, observaciones, idempotencia |
+| [`docs/03-contratos-eventos.md`](docs/03-contratos-eventos.md) | Topics MQTT, lotes, observaciones, idempotencia |
 | [`docs/04-simulador.md`](docs/04-simulador.md) | Modelo físico de la planta y modelo de ruido RFID |
 | [`docs/05-resolucion-ubicacion.md`](docs/05-resolucion-ubicacion.md) | El algoritmo central: de lecturas sucias a ubicación |
 | [`docs/06-roadmap.md`](docs/06-roadmap.md) | Fases de entrega |

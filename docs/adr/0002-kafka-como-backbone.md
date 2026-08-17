@@ -1,7 +1,18 @@
 # ADR-0002 — Kafka como backbone de eventos (a partir de la fase 3)
 
-- **Estado:** Aceptado, con introducción diferida a la fase 3
+- **Estado:** **Sustituido por [ADR-0011](0011-sin-kafka-de-momento.md)**
 - **Fecha:** 2026-08-17
+
+> **Este ADR ya no está vigente.** Se conserva por el razonamiento, que sigue siendo
+> correcto *bajo los supuestos con los que se escribió*: ~6.000 lecturas/s constantes y
+> un estado de ventana de cientos de entradas. [ADR-0010](0010-lector-en-la-maquina.md)
+> cambió la topología de lectores y esos supuestos dejaron de ser ciertos: el volumen
+> cayó a ~300 lecturas/s en punta y el estado a cuatro entradas. Sin ellos, ningún
+> argumento de aquí se sostiene, y [ADR-0011](0011-sin-kafka-de-momento.md) descarta
+> Kafka.
+>
+> Sirve de recordatorio de algo útil: **una decisión de infraestructura correcta puede
+> dejar de serlo por un cambio en una capa completamente distinta.**
 
 ## Contexto
 

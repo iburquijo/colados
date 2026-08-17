@@ -90,7 +90,7 @@ imperfectas**.
 | 2021 | 2026 |
 |---|---|
 | Hardware real limitado, un lector | **Planta simulada completa**: patio, máquinas, coladas, camiones |
-| ThingSpeak + polling | MQTT (campo) + Kafka (log de eventos) |
+| ThingSpeak + polling | MQTT (campo) + log de eventos en PostgreSQL |
 | Java Swing de escritorio | Backend Spring Boot + frontend Next.js en tiempo real |
 | Estado mutable | Event store append-only + proyecciones reconstruibles |
 | Una lectura = la verdad | Motor de resolución de ubicación con ventanas, histéresis y confianza |

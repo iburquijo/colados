@@ -25,34 +25,35 @@ cuatro tipos de dato que no se parecen en nada.
 
 | Dato | Volumen | Dónde | Retención |
 |---|---|---|---|
-| **Lecturas crudas** | alto | **Kafka** `rfid.reads.raw` (fase 3). Antes: tabla en Postgres | 7 d / 48 h |
+| **Lecturas crudas** | medio | **PostgreSQL** `raw_read`, particionada por día | 7 d |
 | **Observaciones** | bajo | **PostgreSQL** | larga |
-| **Eventos de dominio** | bajo | **PostgreSQL** + Kafka `coil.events` | infinita |
+| **Eventos de dominio** | bajo | **PostgreSQL** `coil_event` | infinita |
 | **Proyecciones** | ~300 filas | **PostgreSQL** | actual |
 | **Métricas** | continuo | **Prometheus** | 15 d |
 | **Logs de aplicación** | medio | ficheros + `docker logs` | corta |
 
-**Las lecturas crudas no se copian a ninguna base de datos.** Kafka ya es un log: la
-retención de 7 días cubre depuración y reproceso reciente, y pasado ese plazo se
-descartan.
-
 **Elastic / OpenSearch no entra en el proyecto.**
+
+> **Revisado tras [ADR-0011](0011-sin-kafka-de-momento.md).** La versión original de este
+> ADR mandaba las lecturas crudas a Kafka y no a la base de datos, con el argumento de
+> que Kafka *ya es* un log y copiarlo sería duplicar. Al desaparecer Kafka, las lecturas
+> van a `raw_read`: ~13 millones de filas y ~1 GB al día, siete días de retención y
+> particionado diario. La decisión de fondo —**cada tipo de dato en el sitio que
+> corresponde a cómo se consulta**— no cambia.
 
 ## Razones
 
-### Por qué las lecturas crudas no van a una base de datos
+### Por qué las lecturas crudas duran solo 7 días
 
-1. **Kafka ya es exactamente eso.** Un log append-only con retención y consumidores
-   con offset propio. Copiarlo a una tabla es duplicar el mismo dato en dos sitios,
-   con dos políticas de borrado que se pueden desincronizar.
-2. **El volumen no lo justifica.** Tras el colapso en observaciones
-   ([ADR-0008](0008-lotes-y-observaciones.md)), la información que hay que conservar de
-   verdad ya está en las observaciones. Lo crudo solo sirve para forense a corto plazo:
-   *"¿por qué el sistema concluyó eso a las 09:14?"*.
-3. **El simulador con semilla fija es el archivo.** Ventaja que un sistema real no
-   tiene: para reproducir un escenario de hace tres semanas no hace falta conservar
-   500 millones de filas — se relanza el simulador con la misma semilla y salen las
-   mismas lecturas, bit a bit. Retener a largo plazo sería pagar por algo regenerable.
+1. **Lo que hay que conservar ya está en las observaciones.** Tras el colapso
+   ([ADR-0008](0008-lotes-y-observaciones.md)), lo crudo solo sirve para forense a corto
+   plazo: *"¿por qué el sistema concluyó que la dejó en C5-08?"*.
+2. **El simulador con semilla fija es el archivo.** Ventaja que un sistema real no
+   tiene: para reproducir un escenario de hace tres semanas no hace falta conservarlo —
+   se relanza el simulador con la misma semilla y salen las mismas lecturas, bit a bit.
+   Retener a largo plazo sería pagar por algo regenerable.
+3. **Particionar por día hace el borrado gratis.** `DROP PARTITION` en lugar de un
+   `DELETE` masivo que fragmenta la tabla.
 
 ### Por qué Postgres para lo demás
 
@@ -84,7 +85,7 @@ descartan.
 
 - *"¿Dónde está la bobina 4471?"* → proyección (Postgres)
 - *"¿Qué le pasó a la bobina 4471?"* → `coil_event` (Postgres)
-- *"¿Por qué el sistema creyó que la dejó en C5-08?"* → `rfid.reads.raw` (Kafka)
+- *"¿Por qué el sistema creyó que la dejó en C5-08?"* → `raw_read` (7 días)
 - *"¿Cuántas lecturas/s da el lector de la carretilla 2?"* → Prometheus
 - *"¿Por qué petó el consumidor anoche?"* → logs
 
@@ -92,11 +93,11 @@ descartan.
 
 | Alternativa | Por qué no |
 |---|---|
-| Todo en Postgres, incluidas las lecturas crudas | Con antenas fijas eran 518M filas/día; con lector embarcado ([ADR-0010](0010-lector-en-la-maquina.md)) son ~25M/día, que ya cabrían. Se mantiene la decisión igualmente: Kafka **ya es** el log y copiarlo a una tabla es duplicar el dato con dos políticas de borrado que se desincronizan. Sigue siendo el plan hasta la fase 3, con 48 h de retención y solo para depurar. |
+| Kafka como log de lecturas | Era la decisión original de este ADR. Descartada en [ADR-0011](0011-sin-kafka-de-momento.md): con ~13M filas/día, Postgres particionado sobra. |
 | Elastic/OpenSearch como almacén de lecturas | Índice invertido para datos sin texto libre. Coste alto, encaje malo. |
 | Elastic solo para logs de aplicación | Defendible en la fase 5, pero una pieza más para algo que `docker logs` ya resuelve en un proyecto personal. |
 | TimescaleDB | Buen encaje técnico (hypertables, compresión, agregados continuos) y sin salir de Postgres. Innecesario una vez que las observaciones reducen el volumen; sería la primera opción si se decidiera conservar lo crudo a largo plazo. |
-| ClickHouse | Excelente para esto, pero resuelve un problema de escala que este proyecto ya no tiene tras ADR-0008. |
+| ClickHouse | Excelente para esto, pero resuelve un problema de escala que este proyecto no tiene. |
 | MongoDB | Los invariantes del dominio son relacionales. `jsonb` de Postgres cubre la parte flexible. |
 
 ## Consecuencias
@@ -104,12 +105,10 @@ descartan.
 **Positivas:** una sola base de datos que operar; sin duplicación entre almacenes;
 volumen manejable; cada pregunta tiene un sitio claro donde responderse.
 
-**Negativas:** las lecturas crudas más antiguas de 7 días **no se pueden consultar**
-—hay que regenerarlas con el simulador—, lo que resta comodidad al análisis forense de
-incidentes lejanos; el análisis ad-hoc sobre lo crudo se hace con `kcat` y herramientas
-de Kafka en lugar de SQL, que es menos cómodo.
+**Negativas:** las lecturas crudas más antiguas de 7 días **no se pueden consultar** —hay
+que regenerarlas con el simulador—, lo que resta comodidad al análisis forense de
+incidentes lejanos.
 
-**Riesgo asumido:** si en la fase 3 Kafka se descartara (regla de salida de
-[ADR-0002](0002-kafka-como-backbone.md)), las lecturas crudas se quedarían sin almacén.
-En ese caso vuelven a Postgres particionado con retención corta, que es lo que ya se
-hace en las fases 1 y 2.
+**Riesgo asumido:** si el volumen creciera mucho (más máquinas, más plantas), `raw_read`
+sería lo primero en apretar. La salida sería subir el particionado a horario, acortar la
+retención o, si de verdad hiciera falta, TimescaleDB — no cambiar de motor.

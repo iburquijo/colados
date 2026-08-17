@@ -20,8 +20,8 @@ patio" o "cuánto stock libre hay de esta aleación".
 
 1. **Hechos inmutables, append-only** — `observation` y `coil_event`. Nunca se
    actualizan ni se borran. Son la fuente de verdad. Las lecturas crudas de las que
-   derivan viven en Kafka con retención corta, no en la base de datos
-   ([ADR-0009](0009-estrategia-de-almacenamiento.md)).
+   derivan viven en `raw_read`, particionada por día y con retención corta
+   ([ADR-0011](0011-sin-kafka-de-momento.md)).
 2. **Proyecciones mutables** — `coil_location`, `slot_occupancy`, `stock_summary`,
    etc. Se actualizan al procesar eventos y sirven todas las consultas. **Son
    desechables y reconstruibles.**
@@ -97,7 +97,8 @@ CREATE INDEX ON coil_event (type, occurred_at);
 ## Consecuencias
 
 **Positivas:** trazabilidad completa; auditoría del razonamiento del sistema;
-proyecciones desechables; consultas rápidas; encaja con Kafka de forma natural.
+proyecciones desechables; consultas rápidas; y —al no haber broker— el evento y su
+proyección se escriben en la misma transacción, sin ventana de divergencia.
 
 **Negativas:** dos representaciones del mismo hecho que pueden divergir (se mitiga
 reconstruyendo en CI); más volumen de almacenamiento; hay que resistir la tentación

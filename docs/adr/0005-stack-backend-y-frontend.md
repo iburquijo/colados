@@ -21,12 +21,14 @@ Propuesta inicial: Spring Boot en backend y Node.js en frontend. Hay que concret
 1. **Continuidad con el TFG.** El original era Java de escritorio. Que la versión de
    2026 siga siendo Java hace que la comparación 2021↔2026 sea sobre *arquitectura*
    y no sobre lenguaje. La narrativa del proyecto gana.
-2. **Ecosistema de mensajería insuperable.** Spring Integration MQTT, Spring Kafka y
-   Kafka Streams son de primera categoría. Este proyecto es, esencialmente, mensajería.
+2. **Ecosistema de mensajería insuperable.** Spring Integration MQTT es de primera
+   categoría, y si algún día entrara un broker
+   ([ADR-0011](0011-sin-kafka-de-momento.md)) Spring Kafka está al lado. Este proyecto
+   es, esencialmente, ingesta y eventos.
 3. **Java 21:** *virtual threads* (miles de conexiones concurrentes sin programación
    reactiva), *records* para los eventos inmutables, *pattern matching* para
    despachar por tipo de evento, clases selladas para modelar la máquina de estados.
-4. **Testcontainers** con soporte de primera para Mosquitto, Kafka y Postgres.
+4. **Testcontainers** con soporte de primera para Mosquitto y Postgres.
 5. **ArchUnit** para hacer cumplir las fronteras del monolito modular ([ADR-0003](0003-monolito-modular.md)).
 6. Es el stack habitual en entornos industriales/ERP, que es el contexto del dominio.
 
@@ -35,8 +37,8 @@ Compose. Ninguno decisivo.
 
 **Alternativas:** Kotlin (mejor lenguaje, mismo ecosistema; se descarta solo por
 continuidad con el TFG y por no añadir una variable más — sería una elección
-perfectamente defendible); Go (excelente para la ingesta, ecosistema Kafka Streams
-inexistente); Node en todo el stack (un solo lenguaje, pero mensajería y concurrencia
+perfectamente defendible); Go (excelente para la ingesta, ecosistema de datos más
+pobre); Node en todo el stack (un solo lenguaje, pero mensajería y concurrencia
 más flojas para este caso); Python/FastAPI (bueno para simular, flojo para el backbone).
 
 ## Frontend: Next.js + TypeScript
@@ -80,5 +82,6 @@ reanuda el flujo — con SSE y `Last-Event-ID` esto sería más elegante.
 continuidad narrativa con el TFG; excelente soporte de mensajería y de tests.
 
 **Negativas:** dos toolchains (Gradle y npm) — se mitiga con Docker Compose y tareas
-de Gradle que envuelven la build del frontend; JVM + Kafka + Postgres + Mosquitto
-+ Next.js piden una máquina con RAM decente.
+de Gradle que envuelven la build del frontend; JVM + Postgres + Mosquitto + Next.js
+piden una máquina con RAM decente, aunque bastante menos desde que no hay broker de por
+medio.
