@@ -39,6 +39,11 @@ hueco está libre— es **inferido** por el backend a partir de un flujo de lect
 ruidoso, duplicado, desordenado e incompleto. Ese problema de inferencia es el
 proyecto; el CRUD es el envoltorio.
 
+**Objetivo de aprendizaje: arquitectura orientada a eventos.** Es también el criterio
+para resolver empates de diseño: ante dos opciones equivalentes gana la que enseñe más
+sobre eventos, *streaming* y tiempo real; lo que no sirva a ese objetivo se resuelve
+por la vía más simple que funcione.
+
 ## 3. Arquitectura de un vistazo
 
 ```mermaid

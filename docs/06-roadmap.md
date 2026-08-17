@@ -13,7 +13,10 @@ lo hecho hasta ahí tiene valor por sí solo.
 - [x] Arquitectura y ADRs
 - [x] Contratos de evento
 - [x] Diseño del simulador y del motor de resolución
-- [ ] Cerrar las decisiones abiertas ([`decisiones-abiertas.md`](decisiones-abiertas.md))
+- [x] Fijar el objetivo de aprendizaje: **arquitectura orientada a eventos**
+- [x] Simulador en Java + Spring Boot ([ADR-0007](adr/0007-tecnologia-del-simulador.md))
+- [x] Kafka en la fase 3, no antes ([ADR-0002](adr/0002-kafka-como-backbone.md))
+- [ ] Decisiones abiertas restantes ([`decisiones-abiertas.md`](decisiones-abiertas.md)) — ninguna bloquea la fase 1
 
 **Entregable:** este repositorio de documentación.
 
@@ -53,9 +56,12 @@ Si solo se llega hasta aquí, el proyecto está justificado.
 
 ---
 
-## Fase 3 — Kafka y el replay
+## Fase 3 — Kafka y el replay ⭐
 
-Objetivo: convertir el sistema en algo reproducible y auditable.
+**El corazón del proyecto**, dado que el objetivo de aprendizaje es la arquitectura
+orientada a eventos. Las fases 1 y 2 construyen el dominio que esta fase hace
+reproducible y auditable; las fases 4 y 5 lo visten. Si hay que apretar en algún
+sitio, es aquí.
 
 - Kafka (KRaft) + Schema Registry en el Compose
 - `ingest` publica en `rfid.reads.raw`; `tracking` pasa a Kafka Streams

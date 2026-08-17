@@ -150,6 +150,17 @@ esto de una demo bonita.
 
 ## 7. Tecnología
 
-Spring Boot, mismo toolchain que el backend, ejecutable independiente. Ver
-[ADR-0007](adr/0007-tecnologia-del-simulador.md) — decisión pendiente de confirmar
-frente a la alternativa en Python con SimPy.
+**Java 21 + Spring Boot**, mismo toolchain que el backend, ejecutable independiente
+([ADR-0007](adr/0007-tecnologia-del-simulador.md)).
+
+Piezas propias que hay que escribir, al no usar SimPy:
+
+- **Reloj virtual + cola de eventos**: cola de prioridad por instante de simulación,
+  con factor de escala configurable. Unas 200 líneas.
+- **Fuente de aleatoriedad con semilla**, inyectada, nunca `Math.random()` — sin esto
+  no hay reproducibilidad y el modo `replay` no sirve para nada.
+- **Motor RF**: geometría y modelo de propagación (sección 2).
+
+Para el análisis de las trazas (curvas de precisión, comparación entre versiones del
+resolutor) el arnés de evaluación exporta a CSV/Parquet y el análisis se hace fuera
+del ciclo de build. Es lo que se pierde al no usar Python, y se asume conscientemente.

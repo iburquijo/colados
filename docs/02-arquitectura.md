@@ -188,7 +188,7 @@ Sin esto no se puede razonar sobre un sistema de eventos:
 | Microservicios desde el día 1 | Coste operativo desproporcionado para un proyecto personal; las fronteras del dominio aún no están estabilizadas. |
 | Event sourcing puro (sin tablas de estado) | Consultas de stock y mapa de patio se vuelven costosas. Se opta por híbrido (ADR-0004). |
 | MongoDB | Los invariantes del dominio son relacionales (ocupación de huecos, reservas). Postgres con `jsonb` cubre la parte flexible. |
-| Simulador en Python | Más rápido de escribir y con mejores librerías de simulación, pero añade un segundo toolchain. Decisión pendiente de confirmar. |
+| Simulador en Python | Más rápido de escribir y con mejores librerías de simulación (SimPy, NumPy), pero añade un segundo toolchain y duplica los esquemas. Descartado en [ADR-0007](adr/0007-tecnologia-del-simulador.md). |
 
 ## 10. Repositorio
 

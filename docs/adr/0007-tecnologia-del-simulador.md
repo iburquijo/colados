@@ -1,7 +1,14 @@
 # ADR-0007 — Tecnología del simulador
 
-- **Estado:** **Propuesto** — pendiente de confirmar
+- **Estado:** Aceptado
 - **Fecha:** 2026-08-17
+
+## Decisión
+
+**Java 21 + Spring Boot** (opción A). Confirmada tras fijar que el objetivo de
+aprendizaje del proyecto es la **arquitectura orientada a eventos**, no la simulación
+ni el análisis de datos. Con ese objetivo, la ventaja de SimPy no compensa el coste de
+un segundo toolchain.
 
 ## Contexto
 
@@ -42,17 +49,30 @@ las clases desde el JSON Schema); rendimiento peor a ×1000 con muchos tags.
 **A favor:** binario único, arranque instantáneo, concurrencia natural.
 **En contra:** tercer lenguaje del proyecto; sin ventaja clara sobre A o B para esto.
 
-## Recomendación
+## Razones de la elección
 
-**Opción A (Java/Spring Boot)**, por una razón práctica: un proyecto personal muere
-por fricción acumulada, y un segundo toolchain es fricción en cada build, cada
-Compose y cada cambio de esquema. La ventaja de SimPy es real pero acotada — el
-planificador de eventos discretos que hace falta aquí es sencillo y se escribe una vez.
+1. **Fricción.** Un proyecto personal muere por fricción acumulada, y un segundo
+   toolchain es fricción en cada build, cada Compose, cada cambio de esquema y cada
+   pipeline de CI.
+2. **El planificador de eventos discretos es asumible.** Lo que hace falta aquí —una
+   cola de prioridad por instante de simulación y un reloj virtual— son unas 200
+   líneas que se escriben una vez.
+3. **`contracts/` sin duplicar.** El simulador consume directamente los tipos
+   generados, con lo que desaparece el riesgo de que su `TagRead` derive del del backend.
+4. **El objetivo es la arquitectura de eventos.** El simulador es un medio para
+   generar entrada realista, no el objeto de estudio. Invertir en su ecosistema
+   científico no sirve al objetivo.
 
-**Cuándo cambiaría la recomendación:** si el objetivo de aprendizaje incluyera
-explícitamente simulación y análisis de datos, la opción B pasaría a ser la mejor,
-porque el ecosistema científico de Python no tiene rival y el análisis de las trazas
-sería mucho más rico.
+**Qué se pierde, reconocido:** el análisis de trazas con pandas/matplotlib habría sido
+mucho más cómodo que hacerlo en Java. Mitigación: el arnés de evaluación exporta las
+trazas a CSV/Parquet y el análisis puntual se hace en un cuaderno aparte, fuera del
+ciclo de build.
+
+**Cuándo se revisaría:** si el modelo RF creciera hasta necesitar trilateración,
+filtros bayesianos o ajuste de parámetros a partir de datos (ver ampliaciones en
+`05-resolucion-ubicacion.md`), la balanza se inclinaría hacia Python. Como el
+simulador es un proceso aislado que solo habla MQTT, reescribirlo sería sustituir un
+componente, no migrar el sistema.
 
 ## Consecuencias
 

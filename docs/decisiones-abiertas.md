@@ -3,34 +3,28 @@
 Lo que aún no está cerrado, con una recomendación para cada punto. Al decidir, se
 mueve a un ADR y se borra de aquí.
 
----
+## Marco ya fijado
 
-## 1. Tecnología del simulador — Java o Python
+**Objetivo de aprendizaje del proyecto: arquitectura orientada a eventos.**
 
-Ver [ADR-0007](adr/0007-tecnologia-del-simulador.md).
+No es una declaración de intenciones vacía; es el criterio para resolver los empates
+que vienen. Ante dos opciones equivalentes, gana la que enseñe más sobre eventos,
+*streaming*, trazabilidad y tiempo real. Y a la inversa: cualquier cosa que no sirva a
+ese objetivo se resuelve por la vía más simple que funcione, sin remordimientos.
 
-**Recomendación:** Java/Spring Boot, por evitar un segundo toolchain. Python + SimPy
-es objetivamente mejor para simular, pero paga fricción en cada build.
+Consecuencias directas ya aplicadas:
 
-**Depende de:** si el aprendizaje que buscas incluye simulación y análisis de datos
-(→ Python) o se centra en arquitectura de eventos (→ Java).
-
----
-
-## 2. ¿Kafka en la fase 3 o desde el principio?
-
-Ver [ADR-0002](adr/0002-kafka-como-backbone.md).
-
-**Recomendación:** fase 3. Las fases 1 y 2 con MQTT → Postgres. Kafka entra cuando ya
-hay dominio real que reprocesar y su valor (replay) es palpable.
-
-**Contraargumento razonable:** si el objetivo explícito es *aprender Kafka*, meterlo
-en la fase 1 y aceptar el sobrecoste es defendible. Es una elección sobre qué quieres
-que sea el proyecto.
+- Simulador en **Java + Spring Boot** ([ADR-0007](adr/0007-tecnologia-del-simulador.md)):
+  es un medio para generar entrada realista, no el objeto de estudio.
+- **Kafka en la fase 3** ([ADR-0002](adr/0002-kafka-como-backbone.md)), no antes: se
+  introduce cuando haya dominio que reprocesar y el replay se pueda demostrar de verdad.
+  La fase 3 es el corazón del proyecto, no un extra.
+- El modelo RF y el motor de resolución se quedan en heurística bien medida; nada de
+  filtros bayesianos hasta que todo lo demás funcione.
 
 ---
 
-## 3. Alcance del patio simulado
+## 1. Alcance del patio simulado
 
 Un patio de 300 huecos con 4 máquinas genera un volumen realista pero pesado para
 depurar.
@@ -41,7 +35,7 @@ distinto tamaño, mismo código.
 
 ---
 
-## 4. Precisión del modelo RF
+## 2. Precisión del modelo RF
 
 Va desde "distancia < X → lee" hasta un modelo de propagación con multitrayecto.
 
@@ -52,7 +46,7 @@ físicamente — el efecto es el mismo y el coste, mucho menor.
 
 ---
 
-## 5. ¿Se modela el apilamiento en altura?
+## 3. ¿Se modela el apilamiento en altura?
 
 Una bobina bajo otra se lee peor (apantallamiento metálico) y no se puede retirar sin
 mover la de arriba (restricción LIFO).
@@ -63,7 +57,7 @@ del simulador. No en la fase 2.
 
 ---
 
-## 6. Autenticación: ¿Keycloak o algo más simple?
+## 4. Autenticación: ¿Keycloak o algo más simple?
 
 **Recomendación:** sin autenticación hasta la fase 5. Cuando toque, Keycloak con OIDC
 en lugar de JWT casero: es lo que se usa de verdad y el aprendizaje es transferible.
@@ -72,7 +66,7 @@ reservas), `ADMIN` (datos maestros, simulador).
 
 ---
 
-## 7. Datos maestros: ¿cómo se cargan?
+## 5. Datos maestros: ¿cómo se cargan?
 
 Zonas, calles, huecos, lectores, antenas, máquinas.
 
@@ -83,7 +77,7 @@ del patio se desincronicen, que es un fallo silencioso y muy molesto de diagnost
 
 ---
 
-## 8. Nombre del proyecto
+## 6. Nombre del proyecto
 
 El repositorio se llama `colados`. En el dominio, el término correcto es **colada**
 (femenino: una colada de aluminio). `colados` funciona como nombre propio y no genera
@@ -95,7 +89,7 @@ proyecto, y el nombre ya está.
 
 ---
 
-## 9. Volumen objetivo
+## 7. Volumen objetivo
 
 ¿Cuántas lecturas por segundo debe aguantar? Determina si hay que preocuparse de
 particionado y rendimiento.

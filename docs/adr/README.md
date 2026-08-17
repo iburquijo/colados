@@ -17,7 +17,7 @@ escribe uno nuevo que lo reemplaza.
 | [0004](0004-event-sourcing-hibrido.md) | Event sourcing híbrido: hechos + proyecciones | Aceptado |
 | [0005](0005-stack-backend-y-frontend.md) | Spring Boot + Next.js | Aceptado |
 | [0006](0006-simulador-emite-solo-lecturas-crudas.md) | **El simulador solo emite lecturas crudas** | Aceptado |
-| [0007](0007-tecnologia-del-simulador.md) | Tecnología del simulador | Propuesto |
+| [0007](0007-tecnologia-del-simulador.md) | Simulador en Java + Spring Boot | Aceptado |
 
 ## Estados
 
