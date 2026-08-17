@@ -1,0 +1,109 @@
+# Decisiones abiertas
+
+Lo que aún no está cerrado, con una recomendación para cada punto. Al decidir, se
+mueve a un ADR y se borra de aquí.
+
+---
+
+## 1. Tecnología del simulador — Java o Python
+
+Ver [ADR-0007](adr/0007-tecnologia-del-simulador.md).
+
+**Recomendación:** Java/Spring Boot, por evitar un segundo toolchain. Python + SimPy
+es objetivamente mejor para simular, pero paga fricción en cada build.
+
+**Depende de:** si el aprendizaje que buscas incluye simulación y análisis de datos
+(→ Python) o se centra en arquitectura de eventos (→ Java).
+
+---
+
+## 2. ¿Kafka en la fase 3 o desde el principio?
+
+Ver [ADR-0002](adr/0002-kafka-como-backbone.md).
+
+**Recomendación:** fase 3. Las fases 1 y 2 con MQTT → Postgres. Kafka entra cuando ya
+hay dominio real que reprocesar y su valor (replay) es palpable.
+
+**Contraargumento razonable:** si el objetivo explícito es *aprender Kafka*, meterlo
+en la fase 1 y aceptar el sobrecoste es defendible. Es una elección sobre qué quieres
+que sea el proyecto.
+
+---
+
+## 3. Alcance del patio simulado
+
+Un patio de 300 huecos con 4 máquinas genera un volumen realista pero pesado para
+depurar.
+
+**Recomendación:** dos configuraciones. `dev` (1 zona, 20 huecos, 1 máquina) para
+desarrollar, y `full` (patio completo) para demos y evaluación. Misma topología,
+distinto tamaño, mismo código.
+
+---
+
+## 4. Precisión del modelo RF
+
+Va desde "distancia < X → lee" hasta un modelo de propagación con multitrayecto.
+
+**Recomendación:** empezar por *path loss* logarítmico con ruido gaussiano y curva
+sigmoide de probabilidad de lectura. Es suficiente para generar ambigüedad realista.
+El multitrayecto se simula con la perilla `phantomRate` en vez de modelarlo
+físicamente — el efecto es el mismo y el coste, mucho menor.
+
+---
+
+## 5. ¿Se modela el apilamiento en altura?
+
+Una bobina bajo otra se lee peor (apantallamiento metálico) y no se puede retirar sin
+mover la de arriba (restricción LIFO).
+
+**Recomendación:** modelarlo, pero en la fase 4. Es realista y da una regla de negocio
+interesante ("no puedes servir esa bobina sin mover dos"), pero complica el planificador
+del simulador. No en la fase 2.
+
+---
+
+## 6. Autenticación: ¿Keycloak o algo más simple?
+
+**Recomendación:** sin autenticación hasta la fase 5. Cuando toque, Keycloak con OIDC
+en lugar de JWT casero: es lo que se usa de verdad y el aprendizaje es transferible.
+Roles: `OPERARIO` (consulta, resuelve incidencias), `SUPERVISOR` (expediciones,
+reservas), `ADMIN` (datos maestros, simulador).
+
+---
+
+## 7. Datos maestros: ¿cómo se cargan?
+
+Zonas, calles, huecos, lectores, antenas, máquinas.
+
+**Recomendación:** definición declarativa en YAML (`infra/plant-layout.yaml`),
+compartida por el simulador y el backend. El simulador la usa para la geometría
+física; el backend, para el modelo lógico. Un único fichero evita que las dos visiones
+del patio se desincronicen, que es un fallo silencioso y muy molesto de diagnosticar.
+
+---
+
+## 8. Nombre del proyecto
+
+El repositorio se llama `colados`. En el dominio, el término correcto es **colada**
+(femenino: una colada de aluminio). `colados` funciona como nombre propio y no genera
+confusión real, pero si prefieres coherencia con el lenguaje ubicuo, `coladas` sería
+más ajustado.
+
+**Recomendación:** dejarlo. Renombrar un repo es fácil pero irrelevante para el
+proyecto, y el nombre ya está.
+
+---
+
+## 9. Volumen objetivo
+
+¿Cuántas lecturas por segundo debe aguantar? Determina si hay que preocuparse de
+particionado y rendimiento.
+
+**Estimación con los parámetros por defecto:** ~300 bobinas activas × ~2 antenas que
+las ven × ~10 lecturas/s ≈ **6.000 lecturas/s**. Es un volumen no trivial: justifica
+la agregación en ventana, el particionado por `epc` y la partición diaria de
+`tag_read`. También significa que el modo acelerado ×1000 no es viable con lecturas
+completas y necesitará submuestreo.
+
+**Decisión pendiente:** fijar un objetivo (¿5.000/s?) y medirlo en la fase 5.
