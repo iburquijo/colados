@@ -14,7 +14,8 @@ en el código, para evitar `Colada.getColadaId()` mezclado con `Coil`.
 | EPC | `epc` | Código único del tag. **No es el identificador de la bobina**: hay una asociación que se crea, se rompe y se reasigna. |
 | Lector | `Reader` | Dispositivo que lee tags. Tres tipos: de zona, embarcado en máquina, de portal/puerta. |
 | Antena | `Antenna` | Cada lector tiene 1..N antenas; la antena es lo que da resolución espacial. |
-| Lectura | `TagRead` | Evento crudo: una antena vio un EPC en un instante con una potencia (RSSI). |
+| Lectura | `TagRead` | Evento crudo: una antena vio un EPC en un instante con una potencia (RSSI). Viaja siempre dentro de un `TagReadBatch`. |
+| Observación | `Observation` | Lecturas continuas del mismo EPC en la misma antena colapsadas en un intervalo. Es lo que se persiste. |
 | Patio | `Yard` | Zona de almacenamiento exterior/cubierta. |
 | Zona | `Zone` | Subdivisión del patio (p. ej. nave A, exterior norte). |
 | Calle | `Row` | Pasillo dentro de una zona. |
@@ -144,7 +145,8 @@ Separado en tres capas según su naturaleza.
 ### Hechos inmutables (append-only, alta cardinalidad)
 
 ```
-tag_read(id, reader_id, antenna_id, epc, rssi, read_at, received_at, ingest_seq)
+observation(id, reader_id, antenna_id, epc, first_seen, last_seen,
+            read_count, rssi_p75, max_gap_ms, open)
 coil_event(id, coil_id, type, payload jsonb, occurred_at, recorded_at, caused_by)
 ```
 

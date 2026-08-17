@@ -27,8 +27,8 @@ lo hecho hasta ahí tiene valor por sí solo.
 Objetivo: una lectura simulada llega al navegador. Sin Kafka todavía.
 
 - `infra/`: Docker Compose con Mosquitto y PostgreSQL
-- `contracts/`: esquema `TagRead` v1 + generación de tipos Java/TS
-- `simulator/`: 1 zona, 1 calle, 1 máquina, 1 colada. Publica `TagRead` por MQTT
+- `contracts/`: esquema `TagReadBatch` v1 + generación de tipos Java/TS
+- `simulator/`: 1 zona, 1 calle, 1 máquina, 1 colada. Publica `TagReadBatch` por MQTT
 - `backend/`: módulo `ingest` (MQTT→Postgres) + `api` (REST + WebSocket)
 - `web/`: tabla de lecturas en vivo
 
@@ -103,7 +103,7 @@ misma historia y **comparar precisiones**. Eso es lo que Kafka compra aquí.
 Ninguno necesario; todos interesantes:
 
 - **Hardware real**: un ESP32 + lector RC522/UHF publicando en el mismo topic MQTT.
-  El backend no distingue si el `TagRead` viene del simulador o de un lector físico
+  El backend no distingue si el `TagReadBatch` viene del simulador o de un lector físico
   — que sea así es la prueba de que la frontera del simulador estaba bien puesta.
   Cierre poético con el TFG de 2021.
 - App móvil / PWA para el lector de mano.

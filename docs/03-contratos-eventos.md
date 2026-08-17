@@ -9,8 +9,8 @@ Tres niveles, y **no se deben mezclar**:
 
 | Nivel | Ejemplo | Quién lo emite | Contenido |
 |---|---|---|---|
-| **Crudo** | `TagRead` | Lector (simulador) | Solo lo que el hardware puede saber |
-| **Limpio** | `TagReadClean` | Módulo `ingest` | Validado, deduplicado, con EPC resuelto a bobina |
+| **Crudo** | `TagReadBatch` | Lector (simulador) | Solo lo que el hardware puede saber |
+| **Limpio** | `Observation` | Módulo `ingest` | Lecturas colapsadas en intervalos, con EPC resuelto a bobina |
 | **Dominio** | `CoilPlaced` | Módulo `tracking` | Hecho de negocio inferido, con confianza |
 
 Que el nivel crudo no contenga `coilId` ni `slotId` no es purismo: es lo que impide
@@ -41,33 +41,81 @@ Decisiones:
   pero se repite igualmente. Un mensaje debe ser interpretable fuera de su topic,
   porque al pasar a Kafka el topic se pierde.
 
-### Payload `TagRead`
+### Payload `TagReadBatch`
+
+El lector **no publica un mensaje por lectura**, sino un **informe de inventario** cada
+200 ms con todas las lecturas de ese periodo. Es lo que hacen los lectores UHF reales
+y baja el tráfico de ~6.000 mensajes/s a ~150.
 
 ```json
 {
-  "schema": "colados.tagread.v1",
+  "schema": "colados.tagreadbatch.v1",
   "plantId": "PLANT-01",
   "readerId": "RDR-ZONE-C3",
   "readerType": "ZONE",
-  "antennaId": 2,
-  "epc": "E280116060000208C7A4B1F3",
-  "rssi": -58.5,
-  "readAt": "2026-08-17T09:14:23.184Z",
-  "seq": 918273,
-  "traceId": "0af7651916cd43dd8448eb211c80319c"
+  "batchSeq": 918273,
+  "windowStart": "2026-08-17T09:14:23.000Z",
+  "windowEnd": "2026-08-17T09:14:23.200Z",
+  "traceId": "0af7651916cd43dd8448eb211c80319c",
+  "reads": [
+    { "antennaId": 2, "epc": "E280116060000208C7A4B1F3", "rssi": -58.5, "readAt": "2026-08-17T09:14:23.184Z" },
+    { "antennaId": 2, "epc": "E280116060000208C7A4B1F3", "rssi": -57.1, "readAt": "2026-08-17T09:14:23.121Z" },
+    { "antennaId": 4, "epc": "E28011606000020911B7C2A0", "rssi": -71.9, "readAt": "2026-08-17T09:14:23.043Z" }
+  ]
 }
 ```
 
 | Campo | Nota |
 |---|---|
 | `schema` | Versionado explícito desde el primer día. Migrar sin versión en el payload es doloroso. |
-| `rssi` | dBm. Imprescindible: es lo que desempata antenas solapadas. |
+| `batchSeq` | Contador monótono **por lector**. Clave de idempotencia `(readerId, batchSeq)` y detección de huecos: si falta el 918272, hubo pérdida. |
+| `windowStart/End` | Periodo que cubre el lote. Un lote **vacío es información válida**: "he mirado y no había nada", distinto de no haber publicado. |
 | `readAt` | Reloj **del lector**. Puede ir desfasado o hacia atrás. |
-| `seq` | Contador monótono por lector → clave de idempotencia `(readerId, seq)` y detección de huecos. |
+| `rssi` | dBm. Imprescindible: es lo que desempata antenas solapadas. |
 | `traceId` | W3C trace context, propagado hasta el WebSocket. |
 
-Lo que **no** lleva: `coilId`, `zoneId`, `slotId`, `event`. Si algún día aparecen ahí,
-alguien está haciendo trampa.
+Un lote ronda los 2–8 KB, muy por debajo de los límites prácticos de MQTT. Si un lector
+llegara a superarlos con muchos tags a la vista, se parte en varios lotes con el mismo
+`windowStart`.
+
+Lo que **no** lleva ninguna lectura: `coilId`, `zoneId`, `slotId`, `event`. Un lector
+físico no conoce ninguna de esas cosas ([ADR-0006](adr/0006-simulador-emite-solo-lecturas-crudas.md)).
+
+### De lecturas a observaciones
+
+Una bobina quieta bajo una antena genera ~10 lecturas/s indefinidamente: tres semanas
+almacenada son 18 millones de filas diciendo lo mismo. Almacenarlas una a una es
+inviable e inútil.
+
+El módulo `ingest` las colapsa en **observaciones con intervalo**, que es lo que hace
+el middleware RFID real (el estándar EPCglobal ALE define justo estas transiciones
+*observed / new / gone*):
+
+```json
+{
+  "schema": "colados.observation.v1",
+  "readerId": "RDR-ZONE-C3", "antennaId": 2,
+  "epc": "E280116060000208C7A4B1F3",
+  "firstSeen": "2026-08-17T09:14:23.043Z",
+  "lastSeen":  "2026-08-17T09:47:11.782Z",
+  "readCount": 19842,
+  "rssiP75": -58.3,
+  "maxGapMs": 1840,
+  "open": false
+}
+```
+
+Una fila en lugar de veinte mil. El colapso se hace **en `ingest`, nunca en el lector**:
+si el dispositivo entregara observaciones ya resueltas estaría regalando parte del
+problema que el sistema debe resolver.
+
+`maxGapMs` se conserva porque una observación con huecos grandes es menos fiable que
+una continua, y el motor de resolución lo usa.
+
+La observación **sí** puede llevar `coilId`: ya es la capa *limpia*, y resolver
+`epc → coilId` con la asignación vigente es precisamente el trabajo de `ingest`. Lo que
+sigue sin llevar es `zoneId`, `slotId` ni `event`: dónde está y qué significa lo decide
+el motor de resolución, no la ingesta.
 
 ### Payload `ReaderStatus`
 
@@ -89,8 +137,8 @@ LWT configurado: `{"schema":"colados.readerstatus.v1","readerId":"...","status":
 
 | Topic | Clave | Particiones | Retención | Contenido |
 |---|---|---|---|---|
-| `rfid.reads.raw` | `epc` | 6 | 30 d | Todas las lecturas validadas |
-| `rfid.reads.clean` | `epc` | 6 | 7 d | Deduplicadas, EPC→bobina resuelto |
+| `rfid.reads.raw` | `epc` | 6 | 7 d | Lecturas validadas, desagregadas del lote |
+| `rfid.observations` | `epc` | 6 | 30 d | Observaciones con intervalo, EPC→bobina resuelto |
 | `coil.events` | `coilId` | 6 | **infinita** | Eventos de dominio — el libro mayor |
 | `coil.state` | `coilId` | 6 | **compactado** | Último estado conocido por bobina |
 | `yard.slot.state` | `slotId` | 6 | compactado | Ocupación por hueco |
@@ -161,7 +209,7 @@ Tres tipos de duplicado, con tres tratamientos distintos. Confundirlos es un err
 
 | Tipo | Origen | Tratamiento |
 |---|---|---|
-| **De transporte** | MQTT QoS 1 reenvía | Deduplicar por `(readerId, seq)` en `ingest`. Se descarta. |
+| **De transporte** | MQTT QoS 1 reenvía el lote | Deduplicar por `(readerId, batchSeq)` en `ingest`. Se descarta el lote entero. |
 | **De lectura** | El tag se lee 20 veces/s por la misma antena | **No se descarta**: es señal legítima. Se agrega en ventana en `tracking`. La frecuencia de lectura *es información* (cerca vs lejos). |
 | **De reproceso** | Replay deliberado desde Kafka | Se procesa normalmente contra proyecciones idempotentes (upsert por clave). |
 

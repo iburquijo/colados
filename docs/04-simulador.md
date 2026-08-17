@@ -10,7 +10,7 @@ demuestra algo o no.
 - Modela la planta física: patio, huecos, máquinas, coladas, camiones, pedidos.
 - Simula qué antena vería qué tag, con qué potencia y cuándo.
 - Aplica un modelo de ruido configurable.
-- Publica `TagRead` y `ReaderStatus` por MQTT.
+- Publica `TagReadBatch` (informe de inventario cada 200 ms) y `ReaderStatus` por MQTT.
 - Publica la verdad física por `sim/groundtruth` **solo para evaluación**.
 
 **No hace, nunca:**

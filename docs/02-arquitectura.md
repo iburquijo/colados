@@ -84,7 +84,7 @@ Se descarta usarlos como única pieza porque queremos una **puerta de calidad** 
 la entrada, y esa puerta es parte del aprendizaje:
 
 - **Validación de esquema**: una lectura malformada va a la DLQ, no rompe el consumidor.
-- **Idempotencia**: `(readerId, ingestSeq)` como clave; MQTT QoS 1 garantiza
+- **Idempotencia**: `(readerId, batchSeq)` como clave; MQTT QoS 1 garantiza
   *at-least-once*, así que los duplicados de transporte llegan seguro.
 - **Normalización de reloj**: se registran `read_at` y `received_at` y se mide el desfase.
 - **Enriquecimiento mínimo**: se añade `plantId`, `receivedAt`, `traceId`.

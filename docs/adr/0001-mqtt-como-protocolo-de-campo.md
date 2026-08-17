@@ -53,4 +53,4 @@ hardware real sin tocar el backend.
 sin esquemas nativos, la validación hay que hacerla en la ingesta.
 
 **Riesgo asumido:** QoS 1 es *at-least-once*, así que **habrá duplicados**. La
-idempotencia por `(readerId, seq)` en el módulo `ingest` no es opcional.
+idempotencia por `(readerId, batchSeq)` en el módulo `ingest` no es opcional.

@@ -18,7 +18,7 @@ guardaría el dato y el mapa del patio funcionaría perfectamente el primer día
 
 ## Decisión
 
-**El simulador publica exclusivamente `TagRead`:**
+**El simulador publica exclusivamente `TagReadBatch`, cuyas entradas son:**
 
 ```json
 { "readerId": "...", "antennaId": 2, "epc": "E280...", "rssi": -58.5, "readAt": "...", "seq": 918273 }
@@ -60,7 +60,7 @@ consume**. Solo la usa el arnés de evaluación para medir la precisión.
 
 1. **Test de arquitectura (ArchUnit):** el módulo `simulator` no puede depender de los
    paquetes de dominio del backend.
-2. **Validación de esquema:** `contracts` define `TagRead` con
+2. **Validación de esquema:** `contracts` define `TagReadBatch` con
    `additionalProperties: false`. Un campo de más falla la validación.
 3. **Test de aislamiento:** el backend arranca en los tests de integración **sin
    suscribirse** a `sim/groundtruth`. Si alguien lo conecta, el test de precisión

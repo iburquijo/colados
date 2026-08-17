@@ -58,7 +58,7 @@ las clases desde el JSON Schema); rendimiento peor a ×1000 con muchos tags.
    cola de prioridad por instante de simulación y un reloj virtual— son unas 200
    líneas que se escriben una vez.
 3. **`contracts/` sin duplicar.** El simulador consume directamente los tipos
-   generados, con lo que desaparece el riesgo de que su `TagRead` derive del del backend.
+   generados, con lo que desaparece el riesgo de que su `TagReadBatch` derive del del backend.
 4. **El objetivo es la arquitectura de eventos.** El simulador es un medio para
    generar entrada realista, no el objeto de estudio. Invertir en su ecosistema
    científico no sirve al objetivo.
@@ -77,6 +77,6 @@ componente, no migrar el sistema.
 ## Consecuencias
 
 Sea cual sea la elección, se mantienen: el simulador es un proceso aparte, solo
-publica `TagRead` por MQTT, es determinista por semilla y no depende del backend.
+publica `TagReadBatch` por MQTT, es determinista por semilla y no depende del backend.
 Cumplidas esas condiciones, cambiar de lenguaje más adelante es reescribir un
 componente aislado, no migrar el sistema.
