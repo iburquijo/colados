@@ -18,6 +18,8 @@ escribe uno nuevo que lo reemplaza.
 | [0005](0005-stack-backend-y-frontend.md) | Spring Boot + Next.js | Aceptado |
 | [0006](0006-simulador-emite-solo-lecturas-crudas.md) | **El simulador solo emite lecturas crudas** | Aceptado |
 | [0007](0007-tecnologia-del-simulador.md) | Simulador en Java + Spring Boot | Aceptado |
+| [0008](0008-lotes-y-observaciones.md) | Lotes de lectura y colapso en observaciones | Aceptado |
+| [0009](0009-estrategia-de-almacenamiento.md) | Cada tipo de dato en su sitio | Aceptado |
 
 ## Estados
 

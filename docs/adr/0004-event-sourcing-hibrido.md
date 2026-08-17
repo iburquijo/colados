@@ -18,8 +18,10 @@ patio" o "cuánto stock libre hay de esta aleación".
 
 **Híbrido:**
 
-1. **Hechos inmutables, append-only** — `tag_read` y `coil_event`. Nunca se
-   actualizan ni se borran. Son la fuente de verdad.
+1. **Hechos inmutables, append-only** — `observation` y `coil_event`. Nunca se
+   actualizan ni se borran. Son la fuente de verdad. Las lecturas crudas de las que
+   derivan viven en Kafka con retención corta, no en la base de datos
+   ([ADR-0009](0009-estrategia-de-almacenamiento.md)).
 2. **Proyecciones mutables** — `coil_location`, `slot_occupancy`, `stock_summary`,
    etc. Se actualizan al procesar eventos y sirven todas las consultas. **Son
    desechables y reconstruibles.**
@@ -75,8 +77,9 @@ CREATE INDEX ON coil_event (type, occurred_at);
 -- Sin UPDATE ni DELETE: revocado por permisos y verificado en test.
 ```
 
-- `tag_read` **particionada por día** (volumen alto): retención en caliente de 30 días,
-  histórico a almacenamiento frío o simplemente descartado en un proyecto personal.
+- `observation` sustituye a una hipotética tabla de lecturas: el colapso en intervalos
+  ([ADR-0008](0008-lotes-y-observaciones.md)) baja el volumen de ~500M filas/día a unos
+  pocos miles, así que no hace falta particionar ni gestionar retención.
 - Las proyecciones se actualizan con `upsert` por clave → idempotentes → el replay es seguro.
 - Cada proyección guarda el `last_processed_event_id` para poder reanudar.
 - Comando `./gradlew rebuildProjections` que las vacía y las regenera. **Debe ejecutarse

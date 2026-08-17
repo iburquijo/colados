@@ -95,7 +95,70 @@ Ojo con lo último: si se particiona por `readerId` en vez de por `epc`, el moto
 resolución no puede razonar sobre una bobina sin barajar particiones. La decisión de
 clave de partición **es** una decisión de arquitectura.
 
-## 4. El componente central: resolución de ubicación
+## 4. Flujo de eventos: quién publica, quién consume, quién persiste
+
+El diagrama anterior dice qué piezas hay, pero no quién habla con quién en cada salto.
+Esto es lo concreto.
+
+### Fases 1 y 2 (sin Kafka)
+
+| Salto | Transporte | Publica | Consume | Se persiste en |
+|---|---|---|---|---|
+| `TagReadBatch` | **MQTT** `colados/PLANT-01/reader/+/reads` | simulador | `ingest` | tabla `raw_read`, 48 h |
+| `Observation` | **en proceso** (`ApplicationEventPublisher`) | `ingest` | `tracking` | tabla `observation` |
+| `CoilPlaced`, `CoilMissing`… | **en proceso** | `tracking` | `inventory`, `alerting`, `api` | tabla `coil_event` |
+| cambio de ubicación | **WebSocket/STOMP** | `api` | navegador | — |
+
+Solo el primer salto es red de verdad. Los intermedios son llamadas Spring dentro del
+mismo proceso, y **quien produce el evento es quien lo persiste**, en la misma
+transacción. Es simple y es correcto para un único despliegue.
+
+Lo que se persiste **antes** de razonar: `ingest` guarda el lote antes de interpretarlo.
+Si el motor de resolución revienta, el dato está a salvo y se reprocesa.
+
+### Fase 3 (con Kafka)
+
+```
+simulador --MQTT--> ingest --> rfid.reads.raw --> [colapso] --> rfid.observations
+                                                                      |
+                                                             tracking (Kafka Streams)
+                                                                      |
+                                                                 coil.events
+                                                                      |
+                                    +-----------+-----------+---------+
+                                    |           |           |         |
+                                projector   inventory   alerting     api
+                                    |                                 |
+                                PostgreSQL                        WebSocket
+```
+
+El cambio que importa: **`tracking` deja de escribir en la base de datos.** Solo publica
+en Kafka. Aparece un consumidor nuevo, el **projector**, cuyo único trabajo es leer
+`coil.events` y escribir `coil_event` y las proyecciones.
+
+Se separa por una razón concreta: si `tracking` escribiera en Kafka **y** en Postgres
+tendría una **escritura dual sin atomicidad**. Si el commit de Kafka va bien y el de
+Postgres falla, los dos almacenes divergen para siempre y nadie se entera. Las salidas
+son el patrón *transactional outbox* o —más simple— que Kafka sea la única fuente de
+verdad y la base de datos sea puramente derivada. Se elige lo segundo, y es
+precisamente lo que convierte "borrar las proyecciones y reconstruirlas" en una
+operación rutinaria.
+
+### Dónde vive cada dato
+
+Resumen de [ADR-0009](adr/0009-estrategia-de-almacenamiento.md):
+
+| Dato | Dónde | Responde a |
+|---|---|---|
+| Lecturas crudas | Kafka, 7 d | "¿Por qué el sistema creyó eso a las 09:14?" |
+| Observaciones | PostgreSQL | "¿Qué antenas vieron esta bobina y cuánto tiempo?" |
+| Eventos de dominio | PostgreSQL, infinita | "¿Qué le pasó a la bobina 4471?" |
+| Proyecciones | PostgreSQL | "¿Dónde está ahora?" |
+| Métricas | Prometheus | "¿Cuántas lecturas/s da el lector C3?" |
+
+Mosquitto **no aparece en esta tabla**: reparte y olvida, no almacena nada.
+
+## 5. El componente central: resolución de ubicación
 
 Todo lo demás es infraestructura. Este módulo es el proyecto:
 
@@ -112,7 +175,7 @@ ubicación con confianza + eventos de dominio
 Detalle completo del algoritmo, con los cuatro modos de fallo del RFID real que
 tiene que absorber, en [`05-resolucion-ubicacion.md`](05-resolucion-ubicacion.md).
 
-## 5. Topología del patio simulado
+## 6. Topología del patio simulado
 
 ```
 PATIO
@@ -133,7 +196,7 @@ El **solapamiento deliberado** entre calles contiguas es lo que genera ambigüed
 obliga a que el motor de resolución use RSSI e histéresis. Sin solapamiento el
 problema sería trivial y no se parecería a la realidad.
 
-## 6. Frontend
+## 7. Frontend
 
 Next.js + TypeScript. Vistas:
 
@@ -150,7 +213,7 @@ La consola del simulador es, para un proyecto de portfolio, la vista más valios
 permite subir la tasa de lecturas perdidas al 30 % en directo y enseñar cómo el
 sistema pasa de "ubicación confirmada" a "confianza baja" y luego a `MISSING`.
 
-## 7. Transporte al navegador
+## 8. Transporte al navegador
 
 WebSocket con STOMP sobre Spring. Se descarta SSE pese a ser más simple porque
 la consola del simulador necesita canal de vuelta y no queremos dos mecanismos.
@@ -163,7 +226,7 @@ Topics de suscripción:
 /topic/sim/status         estado del simulador
 ```
 
-## 8. Observabilidad
+## 9. Observabilidad
 
 Sin esto no se puede razonar sobre un sistema de eventos:
 
@@ -177,7 +240,7 @@ Sin esto no se puede razonar sobre un sistema de eventos:
   objetivo: "el motor de resolución acierta el 97,3 % de las ubicaciones con 15 % de
   lecturas perdidas". Eso es un resultado presentable, no una opinión.
 
-## 9. Alternativas consideradas y descartadas
+## 10. Alternativas consideradas y descartadas
 
 | Alternativa | Por qué no |
 |---|---|
@@ -190,7 +253,7 @@ Sin esto no se puede razonar sobre un sistema de eventos:
 | MongoDB | Los invariantes del dominio son relacionales (ocupación de huecos, reservas). Postgres con `jsonb` cubre la parte flexible. |
 | Simulador en Python | Más rápido de escribir y con mejores librerías de simulación (SimPy, NumPy), pero añade un segundo toolchain y duplica los esquemas. Descartado en [ADR-0007](adr/0007-tecnologia-del-simulador.md). |
 
-## 10. Repositorio
+## 11. Repositorio
 
 Monorepo:
 

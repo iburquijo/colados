@@ -49,24 +49,31 @@ por la vía más simple que funcione.
 ```mermaid
 flowchart LR
     SIM["colados-simulator<br/>(planta virtual)"]
-    MQTT["Mosquitto / EMQX<br/>(broker MQTT)"]
-    ING["Ingesta<br/>valida + idempotencia"]
+    MQTT["Mosquitto<br/>(broker MQTT)"]
+    ING["Ingesta<br/>valida, deduplica<br/>y colapsa en observaciones"]
     K["Kafka<br/>(log de eventos)"]
     TRK["Tracking<br/>resolución de ubicación<br/>+ máquina de estados"]
-    PG[("PostgreSQL<br/>event store + proyecciones")]
+    PRJ["Projector"]
+    PG[("PostgreSQL<br/>observaciones, eventos<br/>y proyecciones")]
     API["API REST + WebSocket"]
     WEB["colados-web<br/>(Next.js)"]
 
-    SIM -->|"lecturas crudas"| MQTT
+    SIM -->|"lotes de lectura"| MQTT
     MQTT --> ING
-    ING -->|"rfid.reads.raw"| K
+    ING -->|"rfid.reads.raw<br/>rfid.observations"| K
     K --> TRK
     TRK -->|"coil.events"| K
-    TRK --> PG
+    K --> PRJ
+    PRJ --> PG
     API --> PG
     K --> API
     API <-->|"WS"| WEB
 ```
+
+Las lecturas crudas se quedan en Kafka con 7 días de retención: **nunca llegan a la
+base de datos**. Y `tracking` no escribe en Postgres — solo publica en Kafka, y el
+*projector* es el único que persiste. Así se evita la escritura dual y las
+proyecciones se pueden reconstruir enteras desde el log.
 
 Detalle, alternativas descartadas y diagramas C4 en
 [`docs/02-arquitectura.md`](docs/02-arquitectura.md).
@@ -79,7 +86,7 @@ Detalle, alternativas descartadas y diagramas C4 en
 | Transporte de campo | MQTT (Mosquitto) | Protocolo real de planta: QoS, LWT, ligero |
 | Backbone de eventos | Apache Kafka (KRaft) | Retención + **replay** + múltiples consumidores |
 | Backend | Java 21 + Spring Boot 3 (monolito modular) | Módulos con frontera limpia, un despliegue |
-| Persistencia | PostgreSQL 16 | Event store append-only + proyecciones |
+| Persistencia | PostgreSQL 16 | Observaciones, event store y proyecciones |
 | Frontend | Next.js + TypeScript + React | Mapa de patio en tiempo real |
 | Tiempo real → navegador | WebSocket (STOMP) | Empuje de cambios de ubicación |
 | Infra local | Docker Compose | Todo levanta con un comando |
@@ -92,7 +99,7 @@ Detalle, alternativas descartadas y diagramas C4 en
 | [`docs/00-problema-original.md`](docs/00-problema-original.md) | Proceso *as-is*, puntos de dolor, qué se hizo en 2021 y por qué no valía |
 | [`docs/01-dominio.md`](docs/01-dominio.md) | Lenguaje ubicuo, entidades, máquina de estados de la bobina |
 | [`docs/02-arquitectura.md`](docs/02-arquitectura.md) | Componentes, C4, topología del patio, alternativas |
-| [`docs/03-contratos-eventos.md`](docs/03-contratos-eventos.md) | Topics MQTT/Kafka, esquemas JSON, idempotencia |
+| [`docs/03-contratos-eventos.md`](docs/03-contratos-eventos.md) | Topics MQTT/Kafka, lotes, observaciones, idempotencia |
 | [`docs/04-simulador.md`](docs/04-simulador.md) | Modelo físico de la planta y modelo de ruido RFID |
 | [`docs/05-resolucion-ubicacion.md`](docs/05-resolucion-ubicacion.md) | El algoritmo central: de lecturas sucias a ubicación |
 | [`docs/06-roadmap.md`](docs/06-roadmap.md) | Fases de entrega |

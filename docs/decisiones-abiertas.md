@@ -95,9 +95,12 @@ proyecto, y el nombre ya está.
 particionado y rendimiento.
 
 **Estimación con los parámetros por defecto:** ~300 bobinas activas × ~2 antenas que
-las ven × ~10 lecturas/s ≈ **6.000 lecturas/s**. Es un volumen no trivial: justifica
-la agregación en ventana, el particionado por `epc` y la partición diaria de
-`tag_read`. También significa que el modo acelerado ×1000 no es viable con lecturas
-completas y necesitará submuestreo.
+las ven × ~10 lecturas/s ≈ **6.000 lecturas/s**, que agrupadas en lotes de 200 ms son
+solo ~150 mensajes MQTT/s ([ADR-0008](adr/0008-lotes-y-observaciones.md)).
 
-**Decisión pendiente:** fijar un objetivo (¿5.000/s?) y medirlo en la fase 5.
+Ese cambio desactivó el problema de almacenamiento, pero no el de proceso: el motor de
+resolución sigue viendo 6.000 lecturas/s. Y el modo acelerado ×1000 no es viable con
+lecturas completas: necesitará submuestreo.
+
+**Decisión pendiente:** fijar un objetivo (¿5.000 lecturas/s procesadas?) y medirlo en
+la fase 5.

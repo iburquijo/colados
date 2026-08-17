@@ -142,7 +142,7 @@ Separado en tres capas según su naturaleza.
 
 `zone`, `row`, `slot`, `reader`, `antenna`, `machine`, `gate`, `truck`, `customer`, `alloy_spec`
 
-### Hechos inmutables (append-only, alta cardinalidad)
+### Hechos inmutables (append-only)
 
 ```
 observation(id, reader_id, antenna_id, epc, first_seen, last_seen,
@@ -150,8 +150,11 @@ observation(id, reader_id, antenna_id, epc, first_seen, last_seen,
 coil_event(id, coil_id, type, payload jsonb, occurred_at, recorded_at, caused_by)
 ```
 
-`read_at` (reloj del lector) y `received_at` (reloj del servidor) separados: el desfase
-de reloj es un fenómeno real y hay que poder medirlo, no ocultarlo.
+`first_seen` / `last_seen` vienen del reloj **del lector** y `recorded_at` del servidor:
+el desfase de reloj es un fenómeno real y hay que poder medirlo, no ocultarlo.
+
+Las lecturas crudas de las que salen estas observaciones **no se guardan aquí**: viven
+en Kafka con 7 días de retención ([ADR-0009](adr/0009-estrategia-de-almacenamiento.md)).
 
 ### Proyecciones (derivadas, reconstruibles desde los hechos)
 
