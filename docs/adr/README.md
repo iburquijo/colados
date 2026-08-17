@@ -20,6 +20,7 @@ escribe uno nuevo que lo reemplaza.
 | [0007](0007-tecnologia-del-simulador.md) | Simulador en Java + Spring Boot | Aceptado |
 | [0008](0008-lotes-y-observaciones.md) | Lotes de lectura y colapso en observaciones | Aceptado |
 | [0009](0009-estrategia-de-almacenamiento.md) | Cada tipo de dato en su sitio | Aceptado |
+| [0010](0010-lector-en-la-maquina.md) | **El lector viaja con la máquina, no con el patio** | Aceptado |
 
 ## Estados
 

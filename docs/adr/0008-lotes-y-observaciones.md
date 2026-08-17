@@ -25,7 +25,7 @@ Dos cambios, en dos sitios distintos:
    inventario** cada 200 ms con todas las lecturas del periodo (`TagReadBatch`).
    Pasa de ~6.000 a ~150 mensajes/s.
 2. **`ingest` colapsa las lecturas en observaciones.** Lecturas continuas del mismo
-   EPC en la misma antena se agregan en un intervalo (`Observation`) con
+   EPC en el mismo lector se agregan en un intervalo (`Observation`) con
    `firstSeen`, `lastSeen`, `readCount`, `rssiP75` y `maxGapMs`. De veinte mil filas
    a una.
 
@@ -69,6 +69,24 @@ eficiencia; interpretar es trabajo del backend.
 | Que el lector emita observaciones | Rompe ADR-0006 y elimina el problema interesante. |
 | Muestreo (1 de cada N lecturas) | Descarta información de forma ciega; el ruido y las lecturas perdidas ya no serían fieles al fenómeno real. |
 
+## Nota posterior: ADR-0010 cambia las cifras, no la decisión
+
+Este ADR se escribió asumiendo antenas fijas en el patio (~6.000 lecturas/s, 518M
+filas/día). [ADR-0010](0010-lector-en-la-maquina.md) traslada el lector a la máquina y
+esas cifras bajan a **~80 lecturas/s por máquina activa, ~300/s en punta y cero con las
+máquinas paradas**.
+
+**Las dos decisiones siguen en pie**, y por las mismas razones:
+
+- Agrupar en lotes es lo que hace el hardware real, y 300 mensajes/s sueltos seguirían
+  siendo absurdos frente a 20 lotes/s.
+- El colapso en observaciones sigue siendo la abstracción correcta: una bobina
+  transportada cinco minutos son ~6.000 lecturas idénticas, y cada tag de ubicación por
+  el que pasa la máquina deja decenas más.
+
+Lo que cambia es que el problema ya no es de **supervivencia** —antes el volumen hacía
+inviable el almacenamiento— sino de **higiene**.
+
 ## Consecuencias
 
 **Positivas:** volumen manejable; contrato más fiel al hardware real; lotes vacíos y
@@ -78,8 +96,8 @@ eficiencia; interpretar es trabajo del backend.
 **Negativas:** el esquema es más complejo (lista anidada en lugar de mensaje plano);
 la idempotencia se lleva al lote, así que un lote parcialmente duplicado se descarta
 entero; `ingest` gana estado (las observaciones abiertas), lo que obliga a pensar qué
-pasa al reiniciar; añade hasta 200 ms de latencia, irrelevante frente a los 30 s de
-confirmación por permanencia.
+pasa al reiniciar; añade hasta 200 ms de latencia, que hay que tener en cuenta al fijar
+el criterio de ausencia del motor de resolución.
 
 **Riesgo:** una observación abierta que nunca se cierra (el tag desaparece y el lector
 también) requiere un barrido periódico que las cierre por caducidad. Sin eso quedan

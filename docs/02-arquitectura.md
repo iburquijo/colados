@@ -88,12 +88,18 @@ la entrada, y esa puerta es parte del aprendizaje:
   *at-least-once*, así que los duplicados de transporte llegan seguro.
 - **Normalización de reloj**: se registran `read_at` y `received_at` y se mide el desfase.
 - **Enriquecimiento mínimo**: se añade `plantId`, `receivedAt`, `traceId`.
-- **Particionado consciente**: clave de Kafka = `epc`, para que todas las lecturas de
-  una misma bobina caigan en la misma partición y se puedan ordenar y ventanear.
+- **Clasificación del EPC**: contra el registro de tags, un EPC leído es de bobina, de
+  ubicación o desconocido. El lector no lo sabe; aquí se decide.
+- **Particionado consciente**: clave de Kafka = `readerId` de la máquina. Es la decisión
+  que cambia con [ADR-0010](adr/0010-lector-en-la-maquina.md): el razonamiento ya no es
+  "todo lo que se sabe de una bobina", sino **"todo lo que ve una máquina"** — el tag de
+  la bobina y los de ubicación tienen que llegar juntos y en orden al mismo procesador,
+  o no se puede correlacionar el depósito con el hueco.
 
-Ojo con lo último: si se particiona por `readerId` en vez de por `epc`, el motor de
-resolución no puede razonar sobre una bobina sin barajar particiones. La decisión de
-clave de partición **es** una decisión de arquitectura.
+Ojo con lo último: particionar por `epc`, que era lo natural con antenas fijas, aquí
+**rompe el algoritmo**, porque separa el tag de la bobina de los tags de ubicación que
+le dan sentido. La clave de partición **es** una decisión de arquitectura, y cambia con
+la topología de lectores.
 
 ## 4. Flujo de eventos: quién publica, quién consume, quién persiste
 
@@ -104,7 +110,7 @@ Esto es lo concreto.
 
 | Salto | Transporte | Publica | Consume | Se persiste en |
 |---|---|---|---|---|
-| `TagReadBatch` | **MQTT** `colados/PLANT-01/reader/+/reads` | simulador | `ingest` | tabla `raw_read`, 48 h |
+| `TagReadBatch` | **MQTT** `colados/PLANT-01/reader/+/reads` | simulador (lectores de máquina, portal y mano) | `ingest` | tabla `raw_read`, 48 h |
 | `Observation` | **en proceso** (`ApplicationEventPublisher`) | `ingest` | `tracking` | tabla `observation` |
 | `CoilPlaced`, `CoilMissing`… | **en proceso** | `tracking` | `inventory`, `alerting`, `api` | tabla `coil_event` |
 | cambio de ubicación | **WebSocket/STOMP** | `api` | navegador | — |
@@ -151,10 +157,10 @@ Resumen de [ADR-0009](adr/0009-estrategia-de-almacenamiento.md):
 | Dato | Dónde | Responde a |
 |---|---|---|
 | Lecturas crudas | Kafka, 7 d | "¿Por qué el sistema creyó eso a las 09:14?" |
-| Observaciones | PostgreSQL | "¿Qué antenas vieron esta bobina y cuánto tiempo?" |
+| Observaciones | PostgreSQL | "¿Qué lector vio este tag, cuándo y cuánto tiempo?" |
 | Eventos de dominio | PostgreSQL, infinita | "¿Qué le pasó a la bobina 4471?" |
 | Proyecciones | PostgreSQL | "¿Dónde está ahora?" |
-| Métricas | Prometheus | "¿Cuántas lecturas/s da el lector C3?" |
+| Métricas | Prometheus | "¿Cuántas lecturas/s da el lector de la carretilla 2?" |
 
 Mosquitto **no aparece en esta tabla**: reparte y olvida, no almacena nada.
 
@@ -163,17 +169,23 @@ Mosquitto **no aparece en esta tabla**: reparte y olvida, no almacena nada.
 Todo lo demás es infraestructura. Este módulo es el proyecto:
 
 ```
-lecturas crudas (sucias, duplicadas, desordenadas, incompletas)
-        ↓  ventana deslizante por EPC
-        ↓  precedencia por tipo de lector
-        ↓  histéresis y tiempo de permanencia (dwell)
-        ↓  RSSI como desempate entre antenas solapadas
-        ↓  detección de contradicción
+lecturas del lector embarcado (bobina transportada + tags de ubicación al pasar)
+        ↓  clasificar EPC: ¿tag de bobina o tag de ubicación?
+        ↓  máquina de estados de la carga: VACÍA ⇄ CARGADA
+        ↓  las dos transiciones SON los eventos: CoilPickedUp y CoilPlaced
+        ↓  localizar la transición entre los tags de ubicación de la ventana
+        ↓  ¿persiste el tag después de soltar? → ese es el hueco
+        ↓  confianza que decae desde la última confirmación
 ubicación con confianza + eventos de dominio
 ```
 
-Detalle completo del algoritmo, con los cuatro modos de fallo del RFID real que
-tiene que absorber, en [`05-resolucion-ubicacion.md`](05-resolucion-ubicacion.md).
+Los tres eventos que se esperan del sistema —cargada, en tránsito, depositada aquí—
+**son las transiciones de una máquina de estados de dos posiciones**. Lo difícil no es
+el modelo: es decidir el instante exacto de cada transición cuando el tag no desaparece
+de golpe, sino que se desvanece.
+
+Detalle completo del algoritmo en
+[`05-resolucion-ubicacion.md`](05-resolucion-ubicacion.md).
 
 ## 6. Topología del patio simulado
 
@@ -185,16 +197,26 @@ PATIO
 ├── ZONA D (exterior)      calles D1..D2 × 24 huecos, sin apilar
 └── ZONA E (expedición)    playa de carga, 12 posiciones
 
-Lectores
-├── ZONE_READER   1 por calle, 2–4 antenas, cobertura solapada entre calles contiguas
-├── MACHINE_READER 1 por máquina, antena en el mástil, alcance corto
-├── GATE_READER   salida de línea, báscula, puerta de expedición
-└── HANDHELD      lector de mano del operario (inventario puntual, alta confianza)
+Cada hueco lleva empotrado un TAG DE UBICACIÓN pasivo (~300 en total),
+cuyo EPC está mapeado a su slotId en los datos maestros.
+
+Lectores (solo 7 en toda la planta)
+├── MACHINE   4 — uno por máquina. Lee el tag de la bobina que transporta
+│                 y los tags de ubicación por los que pasa.
+├── GATE      3 — salida de línea, báscula, puerta de expedición.
+└── HANDHELD  1-2 — lector de mano para el inventario periódico.
 ```
 
-El **solapamiento deliberado** entre calles contiguas es lo que genera ambigüedad y
-obliga a que el motor de resolución use RSSI e histéresis. Sin solapamiento el
-problema sería trivial y no se parecería a la realidad.
+Los lectores **viajan con las máquinas, no cubren el patio**
+([ADR-0010](adr/0010-lector-en-la-maquina.md)). Consecuencias que ordenan todo lo demás:
+
+- **Una bobina depositada no genera ninguna lectura.** El volumen es proporcional a la
+  actividad, no al inventario: patio lleno y sin movimiento = cero eventos.
+- **Nadie reconfirma el patio.** La única verificación sistemática es el inventario con
+  lector de mano. Por eso la confianza de una ubicación **decae con el tiempo** y el
+  inventario es parte del dominio, no un extra.
+- **La ubicación depende de un único instante**: el momento en que el lector deja de ver
+  el tag de la bobina. Acertar ese instante es el problema central del sistema.
 
 ## 7. Frontend
 
@@ -206,12 +228,14 @@ Next.js + TypeScript. Vistas:
 | **Ficha de bobina** | Datos, colada de origen, linaje de sobrantes y **línea de tiempo completa** de eventos. La trazabilidad que en 2021 no existía. |
 | **Stock** | Por aleación / espesor / ancho. Libre vs reservado vs expedido. Sobrantes destacados. |
 | **Expediciones** | Pedidos, preparación de carga, camión, albarán. |
-| **Alertas** | Invariantes violadas, bobinas `MISSING`, ubicaciones `DISPUTED`, lectores caídos. |
+| **Alertas** | Invariantes violadas, bobinas en `LOCATION_UNKNOWN`, ubicaciones `STALE`, discrepancias de inventario, lectores caídos. |
+| **Inventario** | Lanzar un recorrido, ver confirmaciones y discrepancias, resolver casos abiertos. |
 | **Consola del simulador** | Velocidad de simulación, perillas de ruido, inyección de anomalías. Convierte la demo en algo interactivo. |
 
 La consola del simulador es, para un proyecto de portfolio, la vista más valiosa:
-permite subir la tasa de lecturas perdidas al 30 % en directo y enseñar cómo el
-sistema pasa de "ubicación confirmada" a "confianza baja" y luego a `MISSING`.
+permite subir el ruido en directo y enseñar cómo el sistema pasa de "ubicación
+confirmada" a "confianza baja" y luego a `STALE`, y cómo un inventario lo devuelve todo
+a su sitio.
 
 ## 8. Transporte al navegador
 
@@ -231,7 +255,8 @@ Topics de suscripción:
 Sin esto no se puede razonar sobre un sistema de eventos:
 
 - **Métricas**: lecturas/s por lector, ratio de descarte, lag de consumidor Kafka,
-  latencia lectura→ubicación resuelta (p50/p95/p99), bobinas en `MISSING`, `DISPUTED`.
+  latencia depósito→ubicación resuelta (p50/p95/p99), bobinas en `LOCATION_UNKNOWN` y
+  `STALE`, antigüedad media de la última confirmación.
 - **Trazas**: `traceId` propagado desde la lectura MQTT hasta el mensaje WebSocket.
   Poder seguir *una* lectura por todo el sistema es lo que hace depurable esto.
 - **Métrica estrella**: *precisión de ubicación*. Como el simulador **conoce la verdad

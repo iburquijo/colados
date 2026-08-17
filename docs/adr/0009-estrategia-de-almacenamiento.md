@@ -84,15 +84,15 @@ descartan.
 
 - *"¿Dónde está la bobina 4471?"* → proyección (Postgres)
 - *"¿Qué le pasó a la bobina 4471?"* → `coil_event` (Postgres)
-- *"¿Por qué el sistema creyó que estaba en C3 a las 09:14?"* → `rfid.reads.raw` (Kafka)
-- *"¿Cuántas lecturas/s da el lector C3?"* → Prometheus
+- *"¿Por qué el sistema creyó que la dejó en C5-08?"* → `rfid.reads.raw` (Kafka)
+- *"¿Cuántas lecturas/s da el lector de la carretilla 2?"* → Prometheus
 - *"¿Por qué petó el consumidor anoche?"* → logs
 
 ## Alternativas consideradas
 
 | Alternativa | Por qué no |
 |---|---|
-| Todo en Postgres, incluidas las lecturas crudas | 518M filas/día antes de agregar; decenas de GB diarios y borrado de particiones que gestionar. Sigue siendo el plan hasta la fase 3, pero con 48 h de retención y solo para depurar. |
+| Todo en Postgres, incluidas las lecturas crudas | Con antenas fijas eran 518M filas/día; con lector embarcado ([ADR-0010](0010-lector-en-la-maquina.md)) son ~25M/día, que ya cabrían. Se mantiene la decisión igualmente: Kafka **ya es** el log y copiarlo a una tabla es duplicar el dato con dos políticas de borrado que se desincronizan. Sigue siendo el plan hasta la fase 3, con 48 h de retención y solo para depurar. |
 | Elastic/OpenSearch como almacén de lecturas | Índice invertido para datos sin texto libre. Coste alto, encaje malo. |
 | Elastic solo para logs de aplicación | Defendible en la fase 5, pero una pieza más para algo que `docker logs` ya resuelve en un proyecto personal. |
 | TimescaleDB | Buen encaje técnico (hypertables, compresión, agregados continuos) y sin salir de Postgres. Innecesario una vez que las observaciones reducen el volumen; sería la primera opción si se decidiera conservar lo crudo a largo plazo. |

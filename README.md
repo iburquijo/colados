@@ -31,7 +31,7 @@ No podemos comprar lectores RFID ni una grúa pórtico, así que **simulamos la 
 y construimos el sistema real encima de ella. La regla que ordena todo el diseño:
 
 > **El simulador solo emite lo que un lector RFID físico podría saber:**
-> `(lectorId, antenaId, EPC, RSSI, timestamp)`.
+> `(lectorId, EPC, RSSI, timestamp)`.
 > Nunca emite "la bobina X está en la zona A".
 
 Todo lo demás —qué bobina es, dónde está, si está almacenada o en tránsito, si el
@@ -83,6 +83,7 @@ Detalle, alternativas descartadas y diagramas C4 en
 | Capa | Elección | Por qué |
 |---|---|---|
 | Simulador | Java 21 + Spring Boot | Mismo toolchain; aislado, solo habla MQTT |
+| Lectores | Embarcados en las máquinas + tags de ubicación por hueco | Lo que se hace en un patio real; el volumen crece con la actividad, no con el stock |
 | Transporte de campo | MQTT (Mosquitto) | Protocolo real de planta: QoS, LWT, ligero |
 | Backbone de eventos | Apache Kafka (KRaft) | Retención + **replay** + múltiples consumidores |
 | Backend | Java 21 + Spring Boot 3 (monolito modular) | Módulos con frontera limpia, un despliegue |

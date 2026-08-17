@@ -10,17 +10,18 @@ en el código, para evitar `Colada.getColadaId()` mezclado con `Coil`.
 | Colada | `Cast` | Carga de aluminio fundida y colada con una aleación y composición. Unidad de trazabilidad de calidad. |
 | Bobina / rollo | `Coil` | Rollo de aluminio de varias toneladas producido a partir de una colada. Unidad física que se mueve y se almacena. |
 | Sobrante | `Remnant` (una `Coil` con `parentCoilId`) | Resto de bobina tras un consumo parcial. Tiene identidad y ubicación propias. |
-| Tag | `Tag` | Transpondedor RFID pasivo UHF adherido a la etiqueta de la bobina. Identificado por su **EPC**. |
-| EPC | `epc` | Código único del tag. **No es el identificador de la bobina**: hay una asociación que se crea, se rompe y se reasigna. |
-| Lector | `Reader` | Dispositivo que lee tags. Tres tipos: de zona, embarcado en máquina, de portal/puerta. |
-| Antena | `Antenna` | Cada lector tiene 1..N antenas; la antena es lo que da resolución espacial. |
+| Tag de bobina | `CoilTag` | Transpondedor RFID pasivo UHF adherido a la etiqueta de la bobina. Identificado por su **EPC**. |
+| Tag de ubicación | `LocationTag` | Transpondedor pasivo empotrado en el suelo o la estructura, **uno por hueco**. Su EPC está mapeado a un `slotId` en los datos maestros. |
+| EPC | `epc` | Código único de un tag. **No dice de qué tipo es**: el lector solo ve el código y es el backend quien lo resuelve contra el registro de tags. |
+| Lector | `Reader` | Dispositivo que lee tags. Tres tipos: embarcado en máquina, de portal y de mano ([ADR-0010](adr/0010-lector-en-la-maquina.md)). |
+| Inventario | `InventorySweep` | Recorrido de un operario con lector de mano confirmando qué hay en cada hueco. Única reconfirmación sistemática del patio. |
 | Lectura | `TagRead` | Evento crudo: una antena vio un EPC en un instante con una potencia (RSSI). Viaja siempre dentro de un `TagReadBatch`. |
 | Observación | `Observation` | Lecturas continuas del mismo EPC en la misma antena colapsadas en un intervalo. Es lo que se persiste. |
 | Patio | `Yard` | Zona de almacenamiento exterior/cubierta. |
 | Zona | `Zone` | Subdivisión del patio (p. ej. nave A, exterior norte). |
 | Calle | `Row` | Pasillo dentro de una zona. |
 | Hueco | `Slot` | Posición concreta donde se deja una bobina. Puede admitir apilamiento. |
-| Máquina | `Machine` | Carretilla de bobinas, puente grúa o pórtico. Transporta bobinas. |
+| Máquina | `Machine` | Carretilla de bobinas, puente grúa o pórtico. Transporta bobinas y **lleva el lector embarcado**. |
 | Portal | `Gate` | Punto de paso instrumentado (salida de línea, báscula, puerta de expedición). |
 | Pedido | `Order` | Demanda de cliente que consume bobinas del stock. |
 | Expedición | `Shipment` | Carga de un conjunto de bobinas en un camión contra uno o varios pedidos. |
@@ -49,16 +50,16 @@ erDiagram
     CAST ||--o{ COIL : produce
     COIL ||--o{ COIL : "se corta en (sobrante)"
     COIL ||--o| TAG_ASSIGNMENT : "identificada por"
-    TAG ||--o{ TAG_ASSIGNMENT : "asignado en"
+    COIL_TAG ||--o{ TAG_ASSIGNMENT : "asignado en"
     COIL ||--o{ COIL_EVENT : "historial"
     COIL }o--o| SLOT : "ubicada en"
     ZONE ||--o{ ROW : contiene
     ROW ||--o{ SLOT : contiene
-    ZONE ||--o{ READER : "cubierta por"
-    MACHINE ||--o| READER : "lleva embarcado"
+    SLOT ||--|| LOCATION_TAG : "marcado por"
+    MACHINE ||--|| READER : "lleva embarcado"
     GATE ||--o{ READER : "instrumentado con"
-    READER ||--o{ ANTENNA : tiene
-    ANTENNA ||--o{ TAG_READ : genera
+    READER ||--o{ TAG_READ : genera
+    INVENTORY_SWEEP ||--o{ SLOT : recorre
     SHIPMENT ||--o{ SHIPMENT_LINE : contiene
     SHIPMENT_LINE }o--|| COIL : carga
     SHIPMENT }o--|| TRUCK : "en"
@@ -84,9 +85,14 @@ te cuesta un incidente.
 stateDiagram-v2
     [*] --> PRODUCED: colada finalizada
     PRODUCED --> TAGGED: tag asociado (comisionado)
-    TAGGED --> IN_TRANSIT: máquina la recoge
-    IN_TRANSIT --> STORED: depositada en hueco (dwell confirmado)
+    TAGGED --> IN_TRANSIT: la máquina la recoge
+    IN_TRANSIT --> STORED: depositada, tag de ubicación identificado
+    IN_TRANSIT --> LOCATION_UNKNOWN: depositada sin tag legible
+    LOCATION_UNKNOWN --> STORED: resuelta por inventario
     STORED --> IN_TRANSIT: reubicación / salida a proceso
+    STORED --> STALE: confianza caducada sin confirmar
+    STALE --> STORED: confirmada por inventario o recogida
+    STALE --> LOCATION_UNKNOWN: el inventario no la encuentra
     STORED --> RESERVED: asignada a pedido
     RESERVED --> IN_TRANSIT: preparación de carga
     IN_TRANSIT --> STAGED: en zona de expedición
@@ -96,27 +102,24 @@ stateDiagram-v2
     STORED --> CONSUMED: entra a proceso posterior
     CONSUMED --> [*]
     CONSUMED --> PRODUCED: genera sobrante (nueva bobina hija)
-
-    STORED --> MISSING: sin lecturas > umbral
-    IN_TRANSIT --> MISSING: sin lecturas > umbral
-    MISSING --> STORED: reaparece
-    STORED --> DISPUTED: lecturas contradictorias
-    DISPUTED --> STORED: resuelto (auto o manual)
 ```
 
 Dos estados que no existían en el prototipo de 2021 y que son los que hacen creíble
 el sistema:
 
-- **`MISSING`**: no es un error del software, es el estado normal de una bobina que
-  el hardware dejó de ver. El sistema debe **decir que no lo sabe** en vez de mentir
-  con la última posición conocida como si fuera actual.
-- **`DISPUTED`**: dos zonas afirman tener la misma bobina. Se marca, se alerta y se
-  ofrece resolución manual. Elegir en silencio una de las dos es cómo se corrompe
-  un inventario.
+- **`LOCATION_UNKNOWN`**: la bobina se depositó, pero ningún tag de ubicación se leyó
+  con garantías en ese instante. El sistema **admite que no sabe dónde está** en lugar
+  de deducir el hueco más probable de la trayectoria. Se resuelve en el siguiente
+  inventario.
+- **`STALE`**: el sistema sigue diciendo dónde cree que está, pero han pasado semanas
+  desde la última confirmación. Con lectores embarcados **nadie vuelve a mirar una
+  bobina depositada** ([ADR-0010](adr/0010-lector-en-la-maquina.md)), así que la
+  antigüedad del dato es información de primer orden.
 
-Cada estado de ubicación lleva asociada una **confianza** y un **`observedAt`**,
-no solo un valor. La UI muestra "Calle C-12 · confianza alta · visto hace 40 s"
-en vez de "Calle C-12" a secas.
+Cada estado de ubicación lleva asociada una **confianza** y una **fecha de última
+confirmación**, no solo un valor. La UI muestra "C5-08 · confirmado hace 3 días" en vez
+de "C5-08" a secas. Esa diferencia es la que separa un inventario en el que la gente
+confía de uno que se acaba ignorando — que es lo que pasó con el sistema de 2021.
 
 ## 5. Invariantes del dominio
 
@@ -124,12 +127,15 @@ Reglas que el sistema debe hacer cumplir y sobre las que se alerta al violarse:
 
 1. Una bobina está en **como máximo un** hueco a la vez.
 2. Un hueco tiene ocupación ≤ su capacidad (altura de apilamiento).
-3. Una bobina en estado `IN_TRANSIT` está asociada a **exactamente una** máquina.
+3. Una bobina en estado `IN_TRANSIT` está asociada a **exactamente una** máquina. Dos
+   lectores de máquina no pueden reclamarla a la vez.
 4. Una máquina transporta ≤ su capacidad (normalmente 1 bobina).
 5. Una bobina `SHIPPED` no puede volver a aparecer en el patio (si lo hace → alerta grave).
 6. Un EPC tiene **como máximo una** asignación vigente en un instante dado.
 7. El peso de los sobrantes de una bobina ≤ peso de la bobina padre.
 8. Una bobina `RESERVED` para el pedido A no puede cargarse contra el pedido B.
+9. Un tag de ubicación corresponde a **exactamente un** hueco, y todo hueco tiene el
+   suyo. Un EPC de ubicación leído que no esté en el registro es una anomalía.
 
 Estas invariantes son la fuente natural del catálogo de **alertas** de la UI: cada
 una que se rompe es una anomalía real de planta, no un bug.
@@ -140,14 +146,18 @@ Separado en tres capas según su naturaleza.
 
 ### Datos maestros (mutables, baja cardinalidad)
 
-`zone`, `row`, `slot`, `reader`, `antenna`, `machine`, `gate`, `truck`, `customer`, `alloy_spec`
+`zone`, `row`, `slot`, `location_tag`, `reader`, `machine`, `gate`, `truck`, `customer`, `alloy_spec`
+
+`location_tag(epc, slot_id, installed_at, status)` es el mapa EPC→hueco. Sin él, un
+lector de máquina solo ve códigos sin significado.
 
 ### Hechos inmutables (append-only)
 
 ```
-observation(id, reader_id, antenna_id, epc, first_seen, last_seen,
+observation(id, reader_id, epc, epc_kind, first_seen, last_seen,
             read_count, rssi_p75, max_gap_ms, open)
 coil_event(id, coil_id, type, payload jsonb, occurred_at, recorded_at, caused_by)
+inventory_reading(id, sweep_id, slot_id, epc, read_at, outcome)
 ```
 
 `first_seen` / `last_seen` vienen del reloj **del lector** y `recorded_at` del servidor:
@@ -159,7 +169,8 @@ en Kafka con 7 días de retención ([ADR-0009](adr/0009-estrategia-de-almacenami
 ### Proyecciones (derivadas, reconstruibles desde los hechos)
 
 ```
-coil_location(coil_id, slot_id, machine_id, state, confidence, since, last_seen_at)
+coil_location(coil_id, slot_id, machine_id, state, confidence,
+              since, last_confirmed_at, confirmed_by)
 slot_occupancy(slot_id, occupied_count, coil_ids[], updated_at)
 stock_summary(alloy, thickness, width, free_kg, reserved_kg, remnant_kg)
 reader_health(reader_id, last_heartbeat, reads_last_5m, status)

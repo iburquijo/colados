@@ -28,7 +28,8 @@ Objetivo: una lectura simulada llega al navegador. Sin Kafka todavía.
 
 - `infra/`: Docker Compose con Mosquitto y PostgreSQL
 - `contracts/`: esquema `TagReadBatch` v1 + generación de tipos Java/TS
-- `simulator/`: 1 zona, 1 calle, 1 máquina, 1 colada. Publica `TagReadBatch` por MQTT
+- `simulator/`: 1 calle con sus tags de ubicación, 1 máquina con lector embarcado,
+  1 colada. Publica `TagReadBatch` por MQTT
 - `backend/`: módulo `ingest` (MQTT→Postgres) + `api` (REST + WebSocket)
 - `web/`: tabla de lecturas en vivo
 
@@ -41,17 +42,19 @@ navegador en tiempo real. Ya supera al prototipo de 2021 (sin polling, sin terce
 
 Objetivo: dejar de mostrar lecturas y empezar a mostrar **dónde está cada bobina**.
 
-- Patio completo: zonas, calles, huecos, coberturas solapadas
-- Simulador completo: varias máquinas, coladas, cola de tareas, motor RF
+- Patio completo: zonas, calles, huecos y **tags de ubicación**
+- Simulador completo: varias máquinas con lector embarcado, coladas, cola de tareas, motor RF
 - Modelo de ruido con todas las perillas
-- **Motor de resolución de ubicación** (el módulo `tracking`)
-- Máquina de estados de la bobina, incluidos `MISSING` y `DISPUTED`
+- **Motor de resolución de ubicación** (el módulo `tracking`): máquina de estados de la
+  carga y localización del depósito
+- Máquina de estados de la bobina, incluidos `LOCATION_UNKNOWN` y `STALE`
 - Event store en Postgres + proyecciones
 - Web: **mapa de patio 2D en vivo** + ficha de bobina con línea de tiempo
 - `sim/groundtruth` y cálculo de precisión de ubicación
 
-**Entregable demostrable:** mapa del patio actualizándose solo, con bobinas que se
-mueven, se pierden y se recuperan. **Aquí el proyecto ya cuenta una historia completa.**
+**Entregable demostrable:** mapa del patio actualizándose solo, con máquinas que
+recogen, circulan y depositan, y bobinas que a veces acaban en `LOCATION_UNKNOWN`.
+**Aquí el proyecto ya cuenta una historia completa.**
 Si solo se llega hasta aquí, el proyecto está justificado.
 
 ---
@@ -83,6 +86,10 @@ misma historia y **comparar precisiones**. Eso es lo que Kafka compra aquí.
 - Módulo `shipping`: pedidos, reservas, preparación, carga, camión, albarán
 - Trazabilidad completa: "¿qué bobinas de la colada 2026-0412 se enviaron y a quién?"
 - Módulo `alerting`: invariantes, lectores caídos, discrepancias de ubicación
+- **Inventario con lector de mano**: recorrido, confirmaciones, `InventoryDiscrepancy`
+  y resolución de bobinas en `LOCATION_UNKNOWN`. Es lo que cierra el círculo abierto
+  por [ADR-0010](adr/0010-lector-en-la-maquina.md): sin él, la deriva del inventario no
+  se detecta nunca.
 
 **Entregable:** las preguntas de negocio del documento 00 tienen respuesta.
 

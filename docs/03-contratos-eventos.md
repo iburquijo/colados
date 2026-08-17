@@ -10,7 +10,7 @@ Tres niveles, y **no se deben mezclar**:
 | Nivel | Ejemplo | Quién lo emite | Contenido |
 |---|---|---|---|
 | **Crudo** | `TagReadBatch` | Lector (simulador) | Solo lo que el hardware puede saber |
-| **Limpio** | `Observation` | Módulo `ingest` | Lecturas colapsadas en intervalos, con EPC resuelto a bobina |
+| **Limpio** | `Observation` | Módulo `ingest` | Lecturas colapsadas en intervalos, con el EPC ya clasificado y resuelto |
 | **Dominio** | `CoilPlaced` | Módulo `tracking` | Hecho de negocio inferido, con confianza |
 
 Que el nivel crudo no contenga `coilId` ni `slotId` no es purismo: es lo que impide
@@ -44,23 +44,23 @@ Decisiones:
 ### Payload `TagReadBatch`
 
 El lector **no publica un mensaje por lectura**, sino un **informe de inventario** cada
-200 ms con todas las lecturas de ese periodo. Es lo que hacen los lectores UHF reales
-y baja el tráfico de ~6.000 mensajes/s a ~150.
+200 ms con todas las lecturas de ese periodo. Es lo que hacen los lectores UHF reales:
+una máquina activa genera ~80 lecturas/s que se resumen en 5 mensajes.
 
 ```json
 {
   "schema": "colados.tagreadbatch.v1",
   "plantId": "PLANT-01",
-  "readerId": "RDR-ZONE-C3",
-  "readerType": "ZONE",
+  "readerId": "RDR-MACH-CTR02",
+  "readerType": "MACHINE",
   "batchSeq": 918273,
   "windowStart": "2026-08-17T09:14:23.000Z",
   "windowEnd": "2026-08-17T09:14:23.200Z",
   "traceId": "0af7651916cd43dd8448eb211c80319c",
   "reads": [
-    { "antennaId": 2, "epc": "E280116060000208C7A4B1F3", "rssi": -58.5, "readAt": "2026-08-17T09:14:23.184Z" },
-    { "antennaId": 2, "epc": "E280116060000208C7A4B1F3", "rssi": -57.1, "readAt": "2026-08-17T09:14:23.121Z" },
-    { "antennaId": 4, "epc": "E28011606000020911B7C2A0", "rssi": -71.9, "readAt": "2026-08-17T09:14:23.043Z" }
+    { "epc": "E280116060000208C7A4B1F3", "rssi": -41.2, "readAt": "2026-08-17T09:14:23.184Z" },
+    { "epc": "E280116060000208C7A4B1F3", "rssi": -40.8, "readAt": "2026-08-17T09:14:23.121Z" },
+    { "epc": "E28011606000020911B7C2A0", "rssi": -63.4, "readAt": "2026-08-17T09:14:23.043Z" }
   ]
 }
 ```
@@ -71,10 +71,16 @@ y baja el tráfico de ~6.000 mensajes/s a ~150.
 | `batchSeq` | Contador monótono **por lector**. Clave de idempotencia `(readerId, batchSeq)` y detección de huecos: si falta el 918272, hubo pérdida. |
 | `windowStart/End` | Periodo que cubre el lote. Un lote **vacío es información válida**: "he mirado y no había nada", distinto de no haber publicado. |
 | `readAt` | Reloj **del lector**. Puede ir desfasado o hacia atrás. |
-| `rssi` | dBm. Imprescindible: es lo que desempata antenas solapadas. |
+| `rssi` | dBm. Imprescindible: separa la bobina que va a bordo (~−40) de un tag de ubicación al pasar (~−60) o de la carga de otra máquina cercana. |
 | `traceId` | W3C trace context, propagado hasta el WebSocket. |
 
-Un lote ronda los 2–8 KB, muy por debajo de los límites prácticos de MQTT. Si un lector
+En este ejemplo, el lector de la carretilla CTR-02 ve dos EPC distintos y **no sabe qué
+son**: uno a −41 dBm (la bobina que lleva encima) y otro a −63 (un tag de ubicación por
+el que está pasando). Clasificarlos es trabajo de `ingest`, no del dispositivo.
+
+`readerType` ∈ `MACHINE` | `GATE` | `HANDHELD` ([ADR-0010](adr/0010-lector-en-la-maquina.md)).
+
+Un lote ronda los 1–4 KB, muy por debajo de los límites prácticos de MQTT. Si un lector
 llegara a superarlos con muchos tags a la vista, se parte en varios lotes con el mismo
 `windowStart`.
 
@@ -83,9 +89,10 @@ físico no conoce ninguna de esas cosas ([ADR-0006](adr/0006-simulador-emite-sol
 
 ### De lecturas a observaciones
 
-Una bobina quieta bajo una antena genera ~10 lecturas/s indefinidamente: tres semanas
-almacenada son 18 millones de filas diciendo lo mismo. Almacenarlas una a una es
-inviable e inútil.
+Un tag que permanece al alcance se lee ~20 veces por segundo. Una bobina transportada
+durante un trayecto de cinco minutos son ~6.000 lecturas que dicen exactamente lo mismo:
+"sigue a bordo". Y cada tag de ubicación por el que pasa la máquina deja decenas de
+lecturas más. Almacenarlas una a una es inviable e inútil.
 
 El módulo `ingest` las colapsa en **observaciones con intervalo**, que es lo que hace
 el middleware RFID real (el estándar EPCglobal ALE define justo estas transiciones
@@ -94,8 +101,10 @@ el middleware RFID real (el estándar EPCglobal ALE define justo estas transicio
 ```json
 {
   "schema": "colados.observation.v1",
-  "readerId": "RDR-ZONE-C3", "antennaId": 2,
+  "readerId": "RDR-MACH-CTR02",
   "epc": "E280116060000208C7A4B1F3",
+  "epcKind": "COIL_TAG",
+  "coilId": "COIL-2026-004471",
   "firstSeen": "2026-08-17T09:14:23.043Z",
   "lastSeen":  "2026-08-17T09:47:11.782Z",
   "readCount": 19842,
@@ -122,7 +131,7 @@ el motor de resolución, no la ingesta.
 ```json
 {
   "schema": "colados.readerstatus.v1",
-  "readerId": "RDR-ZONE-C3",
+  "readerId": "RDR-MACH-CTR02",
   "status": "ONLINE",
   "uptimeS": 84213,
   "readsLastMinute": 412,
@@ -137,8 +146,8 @@ LWT configurado: `{"schema":"colados.readerstatus.v1","readerId":"...","status":
 
 | Topic | Clave | Particiones | Retención | Contenido |
 |---|---|---|---|---|
-| `rfid.reads.raw` | `epc` | 6 | 7 d | Lecturas validadas, desagregadas del lote |
-| `rfid.observations` | `epc` | 6 | 30 d | Observaciones con intervalo, EPC→bobina resuelto |
+| `rfid.reads.raw` | `readerId` | 6 | 7 d | Lecturas validadas, desagregadas del lote |
+| `rfid.observations` | `readerId` | 6 | 30 d | Observaciones con intervalo, EPC clasificado |
 | `coil.events` | `coilId` | 6 | **infinita** | Eventos de dominio — el libro mayor |
 | `coil.state` | `coilId` | 6 | **compactado** | Último estado conocido por bobina |
 | `yard.slot.state` | `slotId` | 6 | compactado | Ocupación por hueco |
@@ -154,6 +163,10 @@ Notas:
   sin tocar la base de datos.
 - **La DLQ guarda el motivo**, no solo el mensaje. Una DLQ sin diagnóstico es un
   cementerio.
+- **La clave de los topics de lectura es `readerId`, no `epc`.** Con el lector embarcado
+  en la máquina, el razonamiento es "todo lo que ve una máquina": el tag de la bobina y
+  los tags de ubicación deben llegar juntos y en orden al mismo procesador. Particionar
+  por `epc` los separaría y rompería la correlación entre el depósito y el hueco.
 
 ## 4. Eventos de dominio
 
@@ -189,13 +202,15 @@ Tres campos que rara vez se ponen y que aquí son obligatorios:
 | `CoilProduced` | Bobina bobinada | `castId, weightKg, widthMm, thicknessMm` |
 | `TagCommissioned` | EPC asociado a bobina | `epc, from` |
 | `TagDecommissioned` | Tag roto/retirado | `epc, reason` |
-| `CoilPickedUp` | Máquina la coge | `machineId, fromSlotId` |
-| `CoilPlaced` | Depositada en hueco | `slotId, stackLevel` |
+| `CoilPickedUp` | Transición VACÍA→CARGADA del lector de máquina | `machineId, fromSlotId` |
+| `CoilPlaced` | Transición CARGADA→VACÍA, hueco identificado | `slotId, stackLevel, candidates[]` |
+| `CoilPlacedUnknownLocation` | Depósito sin tag de ubicación legible | `machineId, lastKnownRow` |
 | `CoilRelocated` | De un hueco a otro | `fromSlotId, toSlotId` |
-| `CoilLocationUncertain` | Confianza bajo umbral | `candidates[], reason` |
-| `CoilMissing` | Sin lecturas > umbral | `lastSeenAt, lastSlotId` |
-| `CoilReappeared` | Vuelve a leerse | `slotId, missingForS` |
-| `CoilLocationDisputed` | Contradicción | `claims[]` |
+| `CoilLocationCorrected` | Al recoger, el hueco real no era el esperado | `expectedSlotId, actualSlotId, discoveredBy` |
+| `CoilLocationStale` | Confianza caducada sin confirmar | `lastConfirmedAt, ageDays` |
+| `CoilLocationResolved` | Un inventario encuentra una bobina perdida | `slotId, sweepId` |
+| `InventorySweepStarted` / `Completed` | Recorrido con lector de mano | `sweepId, slotsCovered, discrepancies` |
+| `InventoryDiscrepancy` | Lo leído no cuadra con lo esperado | `slotId, expected[], found[]` |
 | `CoilReserved` | Asignada a pedido | `orderId` |
 | `CoilSplit` | Corte parcial | `parentCoilId, childCoilIds[], consumedKg` |
 | `CoilLoaded` | En camión | `shipmentId, truckPlate` |
