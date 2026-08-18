@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: colados-simulator
+  main:
+    web-application-type: none
+
+colados:
+  sim:
+    brokerUrl: tcp://localhost:1883
+    layoutPath: infra/plant-layout.yaml
+    batchWindowMs: 200
+    readAttemptsPerWindow: 4
+    seed: 42
+    speedFactor: 1.0
+    noise:
+      missRate: 0.10
+      locationTagUnreadableRate: 0.05
+      duplicateRate: 0.05
+
+logging:
+  level:
+    com.softbenur.colados: INFO

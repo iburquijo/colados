@@ -1,0 +1,53 @@
+# Topología de la planta. Fichero ÚNICO compartido por el simulador y el backend:
+# el simulador lo usa para la geometría física, el backend para el modelo lógico.
+# Tenerlo por duplicado sería garantizar que las dos visiones se desincronicen.
+#
+# Perfil `simple` (ADR-0013): 30 huecos, una carretilla, capacidad 1 por hueco.
+
+plantId: PLANT-01
+profile: simple
+
+# Malla del patio en metros. El origen (0,0) es la esquina de la salida de línea.
+geometry:
+  slotSpacingM: 3.0      # separación entre huecos consecutivos de una calle
+  rowSpacingM: 6.0       # separación entre calles
+
+zones:
+  - id: A
+    name: "Nave A"
+    covered: true
+    rows:
+      - id: A1
+        slots: 10
+        slotCapacity: 1
+      - id: A2
+        slots: 10
+        slotCapacity: 1
+      - id: A3
+        slots: 10
+        slotCapacity: 1
+
+machines:
+  - id: CTR-01
+    name: "Carretilla 1"
+    type: FORKLIFT
+    speedMs: 1.4          # ~5 km/h
+    reader:
+      id: RDR-MACH-CTR01
+      type: MACHINE
+      rangeM: 5.0         # alcance del lector embarcado
+      loadDistanceM: 1.0  # dónde va la bobina transportada respecto a la antena
+
+gates:
+  - id: LINE_EXIT
+    name: "Salida de línea"
+    positionM: [0.0, 0.0]
+    reader:
+      id: RDR-GATE-LINE
+      type: GATE
+      rangeM: 3.0
+
+production:
+  castIntervalMinutes: [180, 300]   # una colada cada 3-5 h
+  coilsPerCast: [4, 6]
+  coilWeightKg: [6000, 12000]
