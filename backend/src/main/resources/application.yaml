@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: colados-backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/colados
+    username: colados
+    password: colados
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+colados:
+  plant-id: PLANT-01
+  mqtt:
+    broker-url: tcp://localhost:1883
+    client-id: colados-backend
+
+logging:
+  level:
+    com.softbenur.colados: INFO
