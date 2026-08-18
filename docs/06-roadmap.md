@@ -6,7 +6,7 @@ lo hecho hasta ahí tiene valor por sí solo.
 
 ---
 
-## Fase 0 — Diseño *(actual)*
+## Fase 0 — Diseño *(completa)*
 
 - [x] Documentar el problema original y sus limitaciones
 - [x] Lenguaje ubicuo y modelo de dominio
@@ -27,18 +27,20 @@ lo hecho hasta ahí tiene valor por sí solo.
 
 ---
 
-## Fase 1 — El bucle mínimo que funciona
+## Fase 1 — El bucle mínimo que funciona *(actual)*
 
 Objetivo: una lectura simulada llega al navegador.
 
-- Build **Gradle** multi-módulo con Kotlin DSL y wrapper: `:contracts`, `:backend`,
-  `:simulator`, `:web`
-- `infra/`: Docker Compose con Mosquitto y PostgreSQL + `plant-layout.yaml` perfil `simple`
-- `contracts/`: esquema `TagReadBatch` v1 + generación de tipos Java/TS
-- `simulator/`: patio `simple` (3 calles × 10 huecos, capacidad 1), 1 carretilla con
+- [x] Build **Gradle** multi-módulo con Kotlin DSL y wrapper: `:contracts`, `:backend`,
+  `:simulator`. Falta `:web`
+- [x] `infra/`: Docker Compose con Mosquitto y PostgreSQL + `plant-layout.yaml` perfil `simple`
+- [x] `contracts/`: esquema `TagReadBatch` v1 en Java. Falta la generación de tipos TS,
+  que llega con el módulo web
+- [x] `simulator/`: patio `simple` (3 calles × 10 huecos, capacidad 1), 1 carretilla con
   lector embarcado, 1 colada. Publica `TagReadBatch` por MQTT
-- `backend/`: módulo `ingest` (MQTT→Postgres) + `api` (REST + WebSocket)
-- `web/`: tabla de lecturas en vivo
+- [x] `backend/`: módulo `ingest` (MQTT→Postgres, idempotente por `(readerId, batchSeq)`)
+  + `api` (REST + WebSocket STOMP)
+- [ ] `web/`: tabla de lecturas en vivo ← **lo único que queda**
 
 **Entregable demostrable:** el simulador genera lecturas y se ven aparecer en el
 navegador en tiempo real. Ya supera al prototipo de 2021 (sin polling, sin terceros).

@@ -105,9 +105,28 @@ Detalle, alternativas descartadas y diagramas C4 en
 
 ## 6. Estado
 
-**Fase 0 — Diseño, completa.** No hay código todavía: este repositorio contiene la
-definición del problema, la arquitectura y 13 decisiones registradas. Lo siguiente es la
-fase 1 ([`docs/06-roadmap.md`](docs/06-roadmap.md)).
+**Fase 0 — Diseño: completa.** El problema, la arquitectura y 13 decisiones registradas
+en [`docs/adr/`](docs/adr/).
+
+**Fase 1 — El bucle mínimo: en curso.** El camino ya funciona de punta a punta: el
+simulador pasea una carretilla por un patio de 30 huecos y publica `TagReadBatch` por
+MQTT, la ingesta deduplica por `(readerId, batchSeq)` y persiste en `raw_read`, y la API
+empuja un resumen por lote por WebSocket según entra.
+
+| Pieza de la fase 1 | Estado |
+|---|---|
+| Build Gradle multi-módulo: `:contracts`, `:backend`, `:simulator` | hecho |
+| `infra/`: Compose con Mosquitto y PostgreSQL + `plant-layout.yaml` perfil `simple` | hecho |
+| `contracts/`: `TagReadBatch` v1 | hecho en Java; falta generar los tipos TS |
+| `simulator/`: patio `simple`, carretilla con lector embarcado, motor RF y ruido | hecho |
+| `backend/`: `ingest` (MQTT→Postgres, idempotente) y `api` (REST + WebSocket) | hecho |
+| `web/`: tabla de lecturas en vivo | pendiente |
+
+Falta el frontend, que es justo el entregable que cierra la fase —*ver las lecturas
+aparecer en el navegador*—. Mientras tanto el bucle se comprueba desde fuera:
+`GET /api/reads` para la foto y una suscripción STOMP a `/topic/reads` en `ws://localhost:8080/ws`
+para el empuje en vivo. Las fases siguientes, en
+[`docs/06-roadmap.md`](docs/06-roadmap.md).
 
 ## 7. Arranque local
 
@@ -115,6 +134,21 @@ fase 1 ([`docs/06-roadmap.md`](docs/06-roadmap.md)).
 make up      # mosquitto + postgres, espera a que esten healthy
 make smoke   # comprueba que el broker reparte de verdad
 make         # lista el resto de atajos
+```
+
+Para ver el bucle entero, en dos terminales más (cada una levanta la infra si hiciera
+falta):
+
+```bash
+make backend      # ingesta MQTT + API en :8080
+make simulator    # empieza a publicar lecturas
+```
+
+Y desde fuera:
+
+```bash
+curl 'http://localhost:8080/api/reads?limit=5'   # ultimas lecturas persistidas
+make sub                                         # las lecturas crudas segun salen del lector
 ```
 
 Detalle de los servicios y qué hacer si no levanta, en
