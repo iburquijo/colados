@@ -101,13 +101,18 @@ Detalle, alternativas descartadas y diagramas C4 en
 | [`docs/04-simulador.md`](docs/04-simulador.md) | Modelo físico de la planta y modelo de ruido RFID |
 | [`docs/05-resolucion-ubicacion.md`](docs/05-resolucion-ubicacion.md) | El algoritmo central: de lecturas sucias a ubicación |
 | [`docs/06-roadmap.md`](docs/06-roadmap.md) | Fases de entrega |
-| [`docs/decisiones-abiertas.md`](docs/decisiones-abiertas.md) | Lo que aún no está decidido |
 | [`docs/adr/`](docs/adr/) | Registro de decisiones de arquitectura (ADR) |
 
 ## 6. Estado
 
-**Fase 0 — Diseño.** No hay código todavía. Este repositorio contiene, por ahora,
-la definición del problema y la arquitectura. Ver [`docs/06-roadmap.md`](docs/06-roadmap.md).
+**Fase 0 — Diseño, completa.** No hay código todavía: este repositorio contiene la
+definición del problema, la arquitectura y 13 decisiones registradas. Lo siguiente es la
+fase 1 ([`docs/06-roadmap.md`](docs/06-roadmap.md)).
+
+> **Aviso:** el sistema **no tiene autenticación** y la API está abierta
+> ([ADR-0014](docs/adr/0014-sin-autenticacion.md)). Está pensado para correr en
+> `localhost` con `docker compose up`. No lo despliegues en un servidor accesible sin
+> añadir antes una capa de autenticación.
 
 ## 7. Licencia
 

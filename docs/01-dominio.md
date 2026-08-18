@@ -179,6 +179,12 @@ Separado en tres capas según su naturaleza.
 `location_tag(epc, slot_id, installed_at, status)` es el mapa EPC→hueco. Sin él, un
 lector de máquina solo ve códigos sin significado.
 
+Todos estos datos se cargan desde **`infra/plant-layout.yaml`**, un único fichero
+declarativo compartido por el simulador y el backend: el simulador lo usa para la
+geometría física y el backend para el modelo lógico. Tenerlo por duplicado sería
+garantizar que las dos visiones del patio se desincronicen, que es un fallo silencioso y
+muy molesto de diagnosticar.
+
 ### Hechos inmutables (append-only)
 
 ```

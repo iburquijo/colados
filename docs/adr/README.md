@@ -23,6 +23,7 @@ escribe uno nuevo que lo reemplaza.
 | [0011](0011-sin-kafka-de-momento.md) | Sin Kafka: PostgreSQL como log de eventos | Aceptado |
 | [0012](0012-terminal-y-gestion-por-excepcion.md) | Terminal en la máquina y gestión por excepción | Aceptado |
 | [0013](0013-patio-simple-y-capacidad-de-hueco.md) | Patio simple, capacidad de hueco y desambiguación al recoger | Aceptado |
+| [0014](0014-sin-autenticacion.md) | Sin autenticación, pero con identidad como dato | Aceptado |
 
 ## Numeración
 

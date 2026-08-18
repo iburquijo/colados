@@ -20,7 +20,8 @@ lo hecho hasta ahí tiene valor por sí solo.
 - [x] Terminal en cabina y gestión por excepción ([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md))
 - [x] Patio simple, capacidad de hueco y Gradle ([ADR-0013](adr/0013-patio-simple-y-capacidad-de-hueco.md), [ADR-0005](adr/0005-stack-backend-y-frontend.md))
 - [x] Limpieza de ADRs: retirado el 0002, reescritos 0008 y 0009
-- [ ] Decisiones abiertas restantes ([`decisiones-abiertas.md`](decisiones-abiertas.md)) — ninguna bloquea la fase 1
+- [x] Sin autenticación ([ADR-0014](adr/0014-sin-autenticacion.md))
+- [x] **Todas las decisiones de diseño cerradas.** Fase 0 completa
 
 **Entregable:** este repositorio de documentación.
 
@@ -109,7 +110,9 @@ y ver el patio rehacerse solo. Y una gráfica de precisión frente a ruido que c
 ## Fase 5 — Producción-*ish*
 
 - Observabilidad: Prometheus, Grafana, trazas OpenTelemetry de extremo a extremo
-- Autenticación con Keycloak: roles operario / supervisor / admin
+- **Sin autenticación** ([ADR-0014](adr/0014-sin-autenticacion.md)): corre en localhost.
+  Solo identidad como dato (`operatorId` en las confirmaciones), que es dominio y no
+  seguridad
 - Tests de carga: ¿cuántas lecturas/s aguanta antes de que el `INSERT` sea el cuello
   de botella? El disparador de [ADR-0011](adr/0011-sin-kafka-de-momento.md) son ~10.000/s
 - CI en GitHub Actions, incluido el **test de regresión de precisión**

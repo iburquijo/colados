@@ -101,9 +101,18 @@ En cada tick (por defecto 200 ms), para cada lector de máquina:
    −75 dBm) y de forma intermitente. Es la contaminación entre máquinas.
 6. Aplicar el modelo de ruido y empaquetar todo en el lote de 200 ms.
 
+**Modelo RF: *path loss* logarítmico + ruido gaussiano + curva sigmoide de probabilidad
+de lectura.** No se modela el multitrayecto físicamente: sus efectos se reproducen con
+las perillas (`crossMachineReadRate`, `locationTagUnreadableRate`), que dan el mismo
+comportamiento observable a una fracción del coste.
+
 **Volumen resultante:** ~80 lecturas/s por máquina activa, ~300/s en punta con las
 cuatro trabajando, y **cero cuando están paradas**. El volumen es proporcional a la
 actividad, no al inventario almacenado ([ADR-0010](adr/0010-lector-en-la-maquina.md)).
+
+No se fija un objetivo de rendimiento: a este volumen no hay nada que optimizar. Si algo
+aprieta, se mide entonces. Lo único que sigue siendo un problema real es el **modo
+acelerado**: a ×1000 no es viable generar todas las lecturas y necesitará submuestreo.
 
 ## 3. Modelo de ruido — las perillas
 
