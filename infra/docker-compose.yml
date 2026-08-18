@@ -4,6 +4,10 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2.0
     container_name: colados-mosquitto
+    # El entrypoint de la imagen hace 'chown -R /mosquitto' cuando corre como
+    # root, y falla contra el config montado :ro. Corriendo ya como mosquitto
+    # (uid 1883) se salta ese chown: sin error en el log y sin root.
+    user: "1883:1883"
     ports:
       - "1883:1883"
     volumes:
