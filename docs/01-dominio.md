@@ -8,7 +8,7 @@ en el código, para evitar `Colada.getColadaId()` mezclado con `Coil`.
 | Término | Código | Definición |
 |---|---|---|
 | Colada | `Cast` | Carga de aluminio fundida y colada con una aleación y composición. Unidad de trazabilidad de calidad. |
-| Bobina / rollo | `Coil` | Rollo de aluminio de varias toneladas producido a partir de una colada. Unidad física que se mueve y se almacena. |
+| Bobina / rollo / **lote** | `Coil` | Rollo de aluminio de varias toneladas producido a partir de una colada. **Unidad física que se mueve y se almacena**, y la que ocupa un hueco. En planta se le llama indistintamente bobina o lote. |
 | Sobrante | `Remnant` (una `Coil` con `parentCoilId`) | Resto de bobina tras un consumo parcial. Tiene identidad y ubicación propias. |
 | Tag de bobina | `CoilTag` | Transpondedor RFID pasivo UHF adherido a la etiqueta de la bobina. Identificado por su **EPC**. |
 | Tag de ubicación | `LocationTag` | Transpondedor pasivo empotrado en el suelo o la estructura, **uno por hueco**. Su EPC está mapeado a un `slotId` en los datos maestros. |
@@ -23,7 +23,7 @@ en el código, para evitar `Colada.getColadaId()` mezclado con `Coil`.
 | Patio | `Yard` | Zona de almacenamiento exterior/cubierta. |
 | Zona | `Zone` | Subdivisión del patio (p. ej. nave A, exterior norte). |
 | Calle | `Row` | Pasillo dentro de una zona. |
-| Hueco | `Slot` | Posición concreta donde se deja una bobina. Puede admitir apilamiento. |
+| Hueco | `Slot` | Posición concreta donde se deja una bobina. Tiene una **capacidad** configurable: por defecto 1 ([ADR-0013](adr/0013-patio-simple-y-capacidad-de-hueco.md)). |
 | Máquina | `Machine` | Carretilla de bobinas, puente grúa o pórtico. Transporta bobinas y **lleva el lector embarcado**. |
 | Portal | `Gate` | Punto de paso instrumentado (salida de línea, báscula, puerta de expedición). |
 | Pedido | `Order` | Demanda de cliente que consume bobinas del stock. |
@@ -34,17 +34,29 @@ en el código, para evitar `Colada.getColadaId()` mezclado con `Coil`.
 
 Valores plausibles, no datos reales. Todos parametrizables.
 
-| Parámetro | Valor por defecto |
-|---|---|
-| Peso de bobina | 6–12 t |
-| Bobinas por colada | 8–20 |
-| Frecuencia de colada | 1 cada 3–5 h |
-| Zonas de patio | 4 (2 cubiertas, 2 exteriores) |
-| Huecos por zona | 60–120 |
-| Apilamiento | Hasta 2 alturas solo en zonas cubiertas |
-| Máquinas | 3 carretillas + 1 pórtico |
-| Ciclo de máquina (coger→dejar) | 4–9 min |
-| Camiones/día | 10–20, 2–4 bobinas por camión |
+Dos perfiles, mismo código y misma topología, distinto tamaño
+([ADR-0013](adr/0013-patio-simple-y-capacidad-de-hueco.md)):
+
+| Parámetro | `simple` (por defecto) | `full` (demo y evaluación) |
+|---|---|---|
+| Zonas | 1 | 5 |
+| Huecos | 30 (3 calles × 10) | ~300 |
+| **Capacidad por hueco** | **1** | 1–2 según zona |
+| Máquinas | 1 carretilla | 3 carretillas + 1 pórtico |
+| Portales | salida de línea | línea, báscula, expedición |
+| Bobinas por colada | 4–6 | 8–20 |
+| Peso de bobina | 6–12 t | 6–12 t |
+| Frecuencia de colada | 1 cada 3–5 h | 1 cada 3–5 h |
+| Ciclo de máquina (coger→dejar) | 4–9 min | 4–9 min |
+| Camiones/día | 3–5 | 10–20, 2–4 bobinas por camión |
+
+Con **capacidad 1 la ocupación de un hueco es un booleano** y no hay ambigüedad al
+recoger. Subirla a 2 no cambia el modelo ni el algoritmo: solo hace que el terminal
+pregunte *"¿cuál te llevas?"* cuando el lector ve dos bobinas en el mismo hueco.
+
+**No se modela la física del apilamiento** —ni orden LIFO, ni tener que mover la de
+arriba, ni apantallamiento entre bobinas—: un hueco es un conjunto de hasta N bobinas,
+sin orden.
 
 ## 3. Entidades y relaciones
 
@@ -138,7 +150,8 @@ confía de uno que se acaba ignorando — que es lo que pasó con el sistema de 
 Reglas que el sistema debe hacer cumplir y sobre las que se alerta al violarse:
 
 1. Una bobina está en **como máximo un** hueco a la vez.
-2. Un hueco tiene ocupación ≤ su capacidad (altura de apilamiento).
+2. Un hueco tiene ocupación ≤ su capacidad (`slot.capacity`, por defecto 1). Restricción
+   en la base de datos, no comprobación en el código.
 3. Una bobina en estado `IN_TRANSIT` está asociada a **exactamente una** máquina. Dos
    lectores de máquina no pueden reclamarla a la vez.
 4. Una máquina transporta ≤ su capacidad (normalmente 1 bobina).

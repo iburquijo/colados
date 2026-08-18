@@ -208,23 +208,29 @@ Detalle completo del algoritmo en
 
 ## 6. Topología del patio simulado
 
+Dos perfiles en `infra/plant-layout.yaml`, mismo código
+([ADR-0013](adr/0013-patio-simple-y-capacidad-de-hueco.md)):
+
 ```
-PATIO
-├── ZONA A (cubierta)      calles A1..A4 × 20 huecos, apilable ×2
-├── ZONA B (cubierta)      calles B1..B3 × 20 huecos, apilable ×2
-├── ZONA C (exterior)      calles C1..C5 × 24 huecos, sin apilar
-├── ZONA D (exterior)      calles D1..D2 × 24 huecos, sin apilar
+PERFIL simple  (por defecto — con el que se desarrolla)
+└── ZONA A     calles A1..A3 × 10 huecos = 30 huecos, capacidad 1
+    Lectores: 1 MACHINE (la carretilla) + 1 GATE (salida de línea)
+
+PERFIL full    (demo, evaluación y test de regresión de precisión)
+├── ZONA A (cubierta)      calles A1..A4 × 20 huecos, capacidad 2
+├── ZONA B (cubierta)      calles B1..B3 × 20 huecos, capacidad 2
+├── ZONA C (exterior)      calles C1..C5 × 24 huecos, capacidad 1
+├── ZONA D (exterior)      calles D1..D2 × 24 huecos, capacidad 1
 └── ZONA E (expedición)    playa de carga, 12 posiciones
-
-Cada hueco lleva empotrado un TAG DE UBICACIÓN pasivo (~300 en total),
-cuyo EPC está mapeado a su slotId en los datos maestros.
-
-Lectores (solo 7 en toda la planta)
-├── MACHINE   4 — uno por máquina. Lee el tag de la bobina que transporta
-│                 y los tags de ubicación por los que pasa.
-├── GATE      3 — salida de línea, báscula, puerta de expedición.
-└── HANDHELD  1-2 — lector de mano para el inventario periódico.
+    Lectores: 4 MACHINE + 3 GATE (línea, báscula, expedición) + HANDHELD
 ```
+
+Cada hueco lleva empotrado un **tag de ubicación** pasivo cuyo EPC está mapeado a su
+`slotId` en los datos maestros.
+
+Se desarrolla contra `simple` y se **evalúa siempre contra `full`**: el patio de 30
+huecos con una sola carretilla no ejercita el solapamiento entre calles ni la
+contaminación entre máquinas, así que las métricas solo valen medidas en `full`.
 
 Los lectores **viajan con las máquinas, no cubren el patio**
 ([ADR-0010](adr/0010-lector-en-la-maquina.md)). Consecuencias que ordenan todo lo demás:

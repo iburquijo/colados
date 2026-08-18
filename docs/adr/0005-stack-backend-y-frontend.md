@@ -11,6 +11,7 @@ Propuesta inicial: Spring Boot en backend y Node.js en frontend. Hay que concret
 ## Decisión
 
 - **Backend:** Java 21 + Spring Boot 3.
+- **Build:** **Gradle** con Kotlin DSL, multi-módulo.
 - **Frontend:** Next.js (App Router) + TypeScript + React.
 - **Tiempo real:** WebSocket con STOMP.
 
@@ -40,6 +41,38 @@ continuidad con el TFG y por no añadir una variable más — sería una elecci�
 perfectamente defendible); Go (excelente para la ingesta, ecosistema de datos más
 pobre); Node en todo el stack (un solo lenguaje, pero mensajería y concurrencia
 más flojas para este caso); Python/FastAPI (bueno para simular, flojo para el backbone).
+
+## Build: Gradle con Kotlin DSL
+
+Un único build multi-módulo en la raíz:
+
+```
+settings.gradle.kts
+├── :contracts     esquemas de evento + generación de tipos Java y TypeScript
+├── :backend       monolito modular (ingest, tracking, inventory, shipping, alerting, api)
+├── :simulator     planta virtual + agente operario
+└── :web           envoltorio Gradle sobre la build de npm
+```
+
+**Por qué Gradle y no Maven:**
+
+1. **Multi-módulo sin ceremonia.** `settings.gradle.kts` con cuatro líneas frente a POM
+   padre y POMs hijo con herencia.
+2. **Generación de código integrada.** `contracts` genera POJOs de Java y tipos de
+   TypeScript desde los JSON Schema; eso es una tarea con entradas y salidas declaradas,
+   que es exactamente el modelo de Gradle. En Maven sería un plugin atado a una fase.
+3. **Build incremental y caché.** Con simulador, backend, contratos y frontend en el
+   mismo repositorio, recompilar solo lo que cambió se nota en cada iteración.
+4. **Kotlin DSL** da autocompletado y errores en tiempo de compilación del propio build,
+   en lugar de descubrir el fallo al ejecutarlo.
+5. **Envolver npm es trivial** con una tarea `Exec`, así que `./gradlew build` construye
+   el proyecto entero, frontend incluido, y el CI es un solo comando.
+
+**A cambio:** Gradle es más difícil de leer que un POM cuando no lo conoces, y es más
+fácil escribir un build enrevesado. La regla es que el build siga siendo declarativo —
+si aparece lógica condicional en un `build.gradle.kts`, algo se está haciendo mal.
+
+Se usa el **wrapper** (`./gradlew`) con versión fijada: nadie necesita instalar Gradle.
 
 ## Frontend: Next.js + TypeScript
 

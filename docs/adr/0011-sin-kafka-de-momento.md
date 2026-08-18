@@ -2,15 +2,21 @@
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-08-17
-- **Sustituye a:** [ADR-0002](0002-kafka-como-backbone.md)
+- **Sustituye a:** ADR-0002 (Kafka como backbone), retirado
 
 ## Contexto
 
-[ADR-0002](0002-kafka-como-backbone.md) aceptaba Kafka como backbone, difiriéndolo a la
-fase 3. Su justificación técnica principal era el **estado de ventana recuperable**: el
-motor de resolución mantenía una ventana deslizante por bobina —cientos de entradas en
-memoria— y perderlas al reiniciar dejaba un agujero de cobertura. Kafka Streams, con sus
-*state stores* respaldados por *changelog topics*, resolvía eso de serie.
+Hubo un ADR-0002 que aceptaba Kafka como backbone, difiriéndolo a la fase 3. Su
+justificación técnica principal era el **estado de ventana recuperable**: el motor de
+resolución mantenía una ventana deslizante por bobina —cientos de entradas en memoria— y
+perderlas al reiniciar dejaba un agujero de cobertura. Kafka Streams, con sus *state
+stores* respaldados por *changelog topics*, resolvía eso de serie.
+
+Aquel razonamiento era **correcto bajo los supuestos con los que se escribió**. Se ha
+retirado el documento porque describe una arquitectura que nunca se construyó, pero deja
+una lección que conviene no perder: **una decisión de infraestructura correcta puede
+dejar de serlo por un cambio en una capa completamente distinta.** Lo que tumbó a Kafka
+no fue un error de análisis sobre Kafka, sino mover el lector de sitio.
 
 [ADR-0010](0010-lector-en-la-maquina.md) traslada el lector a la máquina y **ese
 argumento desaparece**. El estado del motor de resolución pasa a ser una máquina de
@@ -19,7 +25,7 @@ minuto de lecturas.
 
 Con los números actualizados, ningún argumento técnico sostiene ya la decisión:
 
-| | ADR-0002 asumía | Realidad tras ADR-0010 |
+| | Se asumía entonces | Realidad tras ADR-0010 |
 |---|---|---|
 | Lecturas | ~6.000/s constantes | ~300/s en punta, **0 con las máquinas paradas** |
 | Filas crudas/día | 518 millones (~60 GB) | ~13 millones (**~1 GB**) |

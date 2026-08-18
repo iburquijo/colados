@@ -86,6 +86,7 @@ Detalle, alternativas descartadas y diagramas C4 en
 | Persistencia y log de eventos | PostgreSQL 16 | Lecturas, observaciones, `coil_event` append-only y proyecciones reconstruibles |
 | Frontend | Next.js + TypeScript + React | Mapa de patio en tiempo real |
 | Tiempo real → navegador | WebSocket (STOMP) | Empuje de cambios de ubicación |
+| Build | Gradle (Kotlin DSL, multi-módulo) | Un solo `./gradlew build` para contratos, backend, simulador y web |
 | Infra local | Docker Compose | Todo levanta con un comando |
 | Observabilidad | Prometheus + Grafana | Métricas de ingesta, lag, tasa de lecturas perdidas |
 
@@ -94,7 +95,7 @@ Detalle, alternativas descartadas y diagramas C4 en
 | Documento | Contenido |
 |---|---|
 | [`docs/00-problema-original.md`](docs/00-problema-original.md) | Proceso *as-is*, puntos de dolor, qué se hizo en 2021 y por qué no valía |
-| [`docs/01-dominio.md`](docs/01-dominio.md) | Lenguaje ubicuo, entidades, máquina de estados de la bobina |
+| [`docs/01-dominio.md`](docs/01-dominio.md) | Lenguaje ubicuo, entidades, máquina de estados de la bobina, perfiles de patio |
 | [`docs/02-arquitectura.md`](docs/02-arquitectura.md) | Componentes, C4, topología del patio, alternativas |
 | [`docs/03-contratos-eventos.md`](docs/03-contratos-eventos.md) | Topics MQTT, lotes, observaciones, idempotencia |
 | [`docs/04-simulador.md`](docs/04-simulador.md) | Modelo físico de la planta y modelo de ruido RFID |

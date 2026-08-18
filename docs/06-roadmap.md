@@ -17,6 +17,9 @@ lo hecho hasta ahí tiene valor por sí solo.
 - [x] Simulador en Java + Spring Boot ([ADR-0007](adr/0007-tecnologia-del-simulador.md))
 - [x] Sin Kafka: PostgreSQL como log de eventos ([ADR-0011](adr/0011-sin-kafka-de-momento.md))
 - [x] Lector embarcado en la máquina + tags de ubicación ([ADR-0010](adr/0010-lector-en-la-maquina.md))
+- [x] Terminal en cabina y gestión por excepción ([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md))
+- [x] Patio simple, capacidad de hueco y Gradle ([ADR-0013](adr/0013-patio-simple-y-capacidad-de-hueco.md), [ADR-0005](adr/0005-stack-backend-y-frontend.md))
+- [x] Limpieza de ADRs: retirado el 0002, reescritos 0008 y 0009
 - [ ] Decisiones abiertas restantes ([`decisiones-abiertas.md`](decisiones-abiertas.md)) — ninguna bloquea la fase 1
 
 **Entregable:** este repositorio de documentación.
@@ -27,10 +30,12 @@ lo hecho hasta ahí tiene valor por sí solo.
 
 Objetivo: una lectura simulada llega al navegador.
 
-- `infra/`: Docker Compose con Mosquitto y PostgreSQL
+- Build **Gradle** multi-módulo con Kotlin DSL y wrapper: `:contracts`, `:backend`,
+  `:simulator`, `:web`
+- `infra/`: Docker Compose con Mosquitto y PostgreSQL + `plant-layout.yaml` perfil `simple`
 - `contracts/`: esquema `TagReadBatch` v1 + generación de tipos Java/TS
-- `simulator/`: 1 calle con sus tags de ubicación, 1 máquina con lector embarcado,
-  1 colada. Publica `TagReadBatch` por MQTT
+- `simulator/`: patio `simple` (3 calles × 10 huecos, capacidad 1), 1 carretilla con
+  lector embarcado, 1 colada. Publica `TagReadBatch` por MQTT
 - `backend/`: módulo `ingest` (MQTT→Postgres) + `api` (REST + WebSocket)
 - `web/`: tabla de lecturas en vivo
 
@@ -43,7 +48,7 @@ navegador en tiempo real. Ya supera al prototipo de 2021 (sin polling, sin terce
 
 Objetivo: dejar de mostrar lecturas y empezar a mostrar **dónde está cada bobina**.
 
-- Patio completo: zonas, calles, huecos y **tags de ubicación**
+- Perfil `full`: zonas, calles, huecos con capacidad 1–2 y sus **tags de ubicación**
 - Simulador completo: varias máquinas con lector embarcado, coladas, cola de tareas, motor RF
 - Modelo de ruido con todas las perillas
 - **Motor de resolución de ubicación** (el módulo `tracking`): máquina de estados de la

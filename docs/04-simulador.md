@@ -31,9 +31,16 @@ paquetes de dominio del backend.
 
 ### Geometría
 
-Patio como rejilla 2D con coordenadas en metros. Cada `Slot` tiene posición `(x, y)`,
-nivel de apilamiento y **un tag de ubicación** con su EPC, empotrado en el suelo o en
-la estructura.
+Patio como rejilla 2D con coordenadas en metros, definido en `infra/plant-layout.yaml`.
+Cada `Slot` tiene posición `(x, y)`, una **capacidad** (por defecto 1) y **un tag de
+ubicación** con su EPC, empotrado en el suelo o en la estructura.
+
+Dos perfiles ([ADR-0013](adr/0013-patio-simple-y-capacidad-de-hueco.md)): `simple`
+—30 huecos, 1 carretilla, capacidad 1— para desarrollar, y `full` —~300 huecos,
+4 máquinas— para las demos y la evaluación. **Mismo código, distinto YAML.**
+
+No se modela la física del apilamiento: un hueco es un conjunto de hasta N bobinas, sin
+orden.
 
 Cada máquina tiene una posición que evoluciona en el tiempo y un lector embarcado con
 un patrón de cobertura corto (elipse de ~4-6 m en la dirección de avance), más una zona
@@ -165,8 +172,9 @@ Guardados como YAML en `simulator/scenarios/`, ejecutables desde la UI:
 
 | Escenario | Qué demuestra |
 |---|---|
-| `nominal` | Operación normal, ruido bajo. Línea base. |
-| `turno-punta` | 3 coladas seguidas, todas las máquinas ocupadas, saturación |
+| `nominal` | Operación normal, ruido bajo, perfil `simple`. Línea base. |
+| `hueco-compartido` | `slotCapacity: 2` → el lector ve dos bobinas al recoger y el terminal pregunta cuál se lleva |
+| `turno-punta` | Perfil `full`: 3 coladas seguidas, todas las máquinas ocupadas, saturación |
 | `lector-caido` | El lector de una carretilla cae 10 min → LWT, movimientos ciegos, recuperación |
 | `tags-ilegibles` | Una calle con tags de ubicación sucios → depósitos en `LOCATION_UNKNOWN` |
 | `patio-lleno` | Ocupación >95 % → conflictos de hueco, invariante 2 |

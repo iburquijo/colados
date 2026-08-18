@@ -118,6 +118,18 @@ así que el motor tiene una salida mejor que elegir a ciegas:
 | Ningún tag de ubicación legible | `PlacementNeedsConfirmation`: el terminal pide el hueco |
 | Se preguntó y no hubo respuesta | `CoilPlacedUnknownLocation` → cola de inventario |
 
+Y al **recoger**, con huecos de capacidad > 1
+([ADR-0013](adr/0013-patio-simple-y-capacidad-de-hueco.md)):
+
+| Situación | Qué hace el sistema |
+|---|---|
+| Un solo tag de bobina con señal de "a bordo" | `CoilPickedUp`. **No pregunta.** |
+| **Dos o más tags de bobina con señal fuerte** | `PickupNeedsConfirmation`: el terminal ofrece las bobinas del hueco y el operario elige |
+
+Distinguir por RSSI cuál de dos bobinas apiladas va a bordo es poco fiable —están a menos
+de un metro— y hay un humano delante que lo sabe con certeza. Con la capacidad por defecto
+de 1, este caso solo aparece por contaminación entre máquinas.
+
 **El objetivo del motor deja de ser adivinar y pasa a ser preguntar poco.** La métrica
 de cabecera del sistema es el **porcentaje de movimientos resueltos sin preguntar**, y es
 la que dice si el algoritmo mejora de verdad.
