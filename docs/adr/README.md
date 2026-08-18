@@ -22,6 +22,7 @@ escribe uno nuevo que lo reemplaza.
 | [0009](0009-estrategia-de-almacenamiento.md) | Cada tipo de dato en su sitio | Aceptado |
 | [0010](0010-lector-en-la-maquina.md) | **El lector viaja con la máquina, no con el patio** | Aceptado |
 | [0011](0011-sin-kafka-de-momento.md) | Sin Kafka: PostgreSQL como log de eventos | Aceptado |
+| [0012](0012-terminal-y-gestion-por-excepcion.md) | Terminal en la máquina y gestión por excepción | Aceptado |
 
 ## Estados
 

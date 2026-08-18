@@ -13,6 +13,11 @@ Tres niveles, y **no se deben mezclar**:
 | **Limpio** | `Observation` | Módulo `ingest` | Lecturas colapsadas en intervalos, con el EPC ya clasificado y resuelto |
 | **Dominio** | `CoilPlaced` | Módulo `tracking` | Hecho de negocio inferido, con confianza |
 
+Y, aparte de estos tres, un cuarto origen que **no es un sensor**: el **terminal de la
+máquina**, con el que el operario confirma o corrige cuando el sistema pregunta
+([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md)). No viaja por MQTT sino por
+REST y WebSocket, porque es una sesión con una persona delante.
+
 Que el nivel crudo no contenga `coilId` ni `slotId` no es purismo: es lo que impide
 que el sistema se autoengañe. Un lector físico ve un EPC y una potencia de señal.
 Nada más.
@@ -220,7 +225,11 @@ Tres campos que rara vez se ponen y que aquí son obligatorios:
 | `TagDecommissioned` | Tag roto/retirado | `epc, reason` |
 | `CoilPickedUp` | Transición VACÍA→CARGADA del lector de máquina | `machineId, fromSlotId` |
 | `CoilPlaced` | Transición CARGADA→VACÍA, hueco identificado | `slotId, stackLevel, candidates[]` |
-| `CoilPlacedUnknownLocation` | Depósito sin tag de ubicación legible | `machineId, lastKnownRow` |
+| `PlacementNeedsConfirmation` | Depósito con hueco dudoso: se pregunta al operario | `machineId, candidates[], askedAt` |
+| `PlacementConfirmed` | El operario responde en el terminal | `slotId, agreedWithRf, answeredAt` |
+| `PlacementDiscrepancy` | Lo confirmado y lo leído por RF no coinciden | `confirmedSlotId, rfSlotId` |
+| `CoilPlacedUnknownLocation` | Nadie contestó, o no había a quién preguntar | `machineId, lastKnownRow` |
+| `MoveTaskAssigned` / `Completed` | Tarea planificada y su cierre | `coilId, fromSlotId, toSlotId, machineId` |
 | `CoilRelocated` | De un hueco a otro | `fromSlotId, toSlotId` |
 | `CoilLocationCorrected` | Al recoger, el hueco real no era el esperado | `expectedSlotId, actualSlotId, discoveredBy` |
 | `CoilLocationStale` | Confianza caducada sin confirmar | `lastConfirmedAt, ageDays` |

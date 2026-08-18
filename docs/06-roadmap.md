@@ -51,6 +51,8 @@ Objetivo: dejar de mostrar lecturas y empezar a mostrar **dónde está cada bobi
 - Máquina de estados de la bobina, incluidos `LOCATION_UNKNOWN` y `STALE`
 - Event store en Postgres + proyecciones
 - Web: **mapa de patio 2D en vivo** + ficha de bobina con línea de tiempo
+- Web: **terminal de cabina** (guantes, sol, movimiento) y agente operario en el simulador
+- Tareas de movimiento y gestión por excepción ([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md))
 - `sim/groundtruth` y cálculo de precisión de ubicación
 
 **Entregable demostrable:** mapa del patio actualizándose solo, con máquinas que

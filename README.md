@@ -80,6 +80,7 @@ Detalle, alternativas descartadas y diagramas C4 en
 |---|---|---|
 | Simulador | Java 21 + Spring Boot | Mismo toolchain; aislado, solo habla MQTT |
 | Lectores | Embarcados en las máquinas + tags de ubicación por hueco | Lo que se hace en un patio real; el volumen crece con la actividad, no con el stock |
+| Operario en el bucle | Terminal en la cabina, **solo por excepción** | El RF propone y el operario confirma cuando el sistema duda; esfuerzo cero cuando todo va bien |
 | Transporte de campo | MQTT (Mosquitto) | Protocolo real de planta: QoS, LWT, ligero |
 | Backend | Java 21 + Spring Boot 3 (monolito modular) | Módulos con frontera limpia, un despliegue |
 | Persistencia y log de eventos | PostgreSQL 16 | Lecturas, observaciones, `coil_event` append-only y proyecciones reconstruibles |

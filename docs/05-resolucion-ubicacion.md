@@ -10,8 +10,13 @@ lector de máquina. Son cuatro entradas, reconstruibles releyendo el último min
 
 Parte de la arquitectura de [ADR-0010](adr/0010-lector-en-la-maquina.md): el lector va
 embarcado en la máquina y lee dos tipos de tag —el de la bobina que transporta y los de
-ubicación por los que pasa—, y los tres eventos que el sistema debe producir se deducen
-de las **transiciones** de ese flujo.
+ubicación por los que pasa—, y los **dos** eventos que el sistema debe producir se
+deducen de las **transiciones** de ese flujo. La trayectoria intermedia no es un evento:
+es telemetría en vivo para pintar la carretilla en el mapa, y no merece guardarse como
+hecho de negocio.
+
+Y de [ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md): hay un **terminal en la
+cabina**, así que cuando el motor no está seguro puede preguntar en vez de adivinar.
 
 ## 1. El problema
 
@@ -20,7 +25,7 @@ Entrada: lotes de lecturas de los lectores de máquina. Cada lectura es
 ubicación, o de algo desconocido — **el lector no lo sabe**; lo resuelve el backend
 contra el registro de tags.
 
-Lo que hay que producir son tres hechos por movimiento:
+Lo que hay que producir son dos hechos por movimiento:
 
 ```
 CoilPickedUp   (qué bobina, qué máquina, de qué hueco)
@@ -100,7 +105,36 @@ Esta última es importante: **el sistema debe admitir que no sabe dónde la ha d
 Inventar el hueco más probable a partir de la trayectoria es exactamente cómo se
 corrompe un inventario en silencio.
 
-## 4. La reconfirmación gratuita
+## 4. Cuando no está claro: preguntar en vez de adivinar
+
+Hay un terminal en la cabina ([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md)),
+así que el motor tiene una salida mejor que elegir a ciegas:
+
+| Situación | Qué hace el sistema |
+|---|---|
+| Candidato claro **y** coincide con el destino planificado | `CoilPlaced`. **No pregunta.** |
+| Candidato claro pero **distinto** del planificado | `CoilPlaced` + `PlacementDiscrepancy`. Pregunta solo si la confianza es media. |
+| Dos candidatos parejos | `PlacementNeedsConfirmation`: el terminal ofrece los dos huecos |
+| Ningún tag de ubicación legible | `PlacementNeedsConfirmation`: el terminal pide el hueco |
+| Se preguntó y no hubo respuesta | `CoilPlacedUnknownLocation` → cola de inventario |
+
+**El objetivo del motor deja de ser adivinar y pasa a ser preguntar poco.** La métrica
+de cabecera del sistema es el **porcentaje de movimientos resueltos sin preguntar**, y es
+la que dice si el algoritmo mejora de verdad.
+
+Y hay una razón dura para no abusar de la pregunta, no solo de comodidad: **cuanto más
+preguntas, más se confirma sin mirar**. Un operario al que se le pide confirmación en
+cada movimiento acaba pulsando el botón por reflejo, y entonces llegan confirmaciones
+humanas —la fuente que el sistema considera más fiable— que son falsas y perfectamente
+coherentes. El simulador lo modela con `operatorRubberStampRate`, y solo se detecta
+cruzando la confirmación con la lectura RF o con un inventario posterior.
+
+Por eso la confirmación **nunca sobrescribe la observación RF**: se guardan las dos y,
+si no coinciden, queda un `PlacementDiscrepancy`. Un patrón de discrepancias en la misma
+calle delata un tag de ubicación defectuoso o un hueco mal mapeado; concentrado en un
+operario, delata a alguien que confirma sin mirar.
+
+## 5. La reconfirmación gratuita
 
 Al **recoger** una bobina, la máquina lee el tag de ubicación del hueco del que la saca.
 Si no coincide con donde el sistema creía que estaba:
@@ -115,7 +149,7 @@ Se recoge desde:  C5-11
 Es la única reconfirmación pasiva que existe en esta arquitectura y no cuesta nada:
 sale de un movimiento que iba a ocurrir de todos modos. Conviene explotarla al máximo.
 
-## 5. Confianza que caduca
+## 6. Confianza que caduca
 
 Con lectores fijos, una bobina se reconfirmaba cada segundo. Aquí **nadie vuelve a
 mirarla** hasta que algo la mueva o pase un inventario. Por tanto la confianza no puede
@@ -134,7 +168,7 @@ La UI **nunca** muestra un hueco a secas. Muestra *"C5-08 · confirmado hace 3 d
 Esa diferencia es la que separa un inventario en el que la gente confía de uno que
 acaba ignorándose, que es lo que pasó con el sistema de 2021.
 
-## 6. El inventario que cierra el círculo
+## 7. El inventario que cierra el círculo
 
 Un operario recorre el patio con el lector de mano. Cada lectura es de máxima
 precedencia: hay un humano apuntando deliberadamente a un sitio concreto.
@@ -155,7 +189,7 @@ Además de corregir, el inventario **mide**: el porcentaje de huecos que cuadran
 tasa de acierto real del sistema en producción, no una estimación. Es la métrica que
 justifica el proyecto entero ante alguien de planta.
 
-## 7. Contaminación entre máquinas
+## 8. Contaminación entre máquinas
 
 Dos carretillas trabajando en la misma calle pueden leerse los tags la una a la otra.
 Criterios, por orden:
@@ -167,7 +201,7 @@ Criterios, por orden:
 3. **Continuidad**: la máquina que la lleva la ve sin interrupción; la de al lado la ve
    a ráfagas mientras se cruzan.
 
-## 8. Late arrivals y reproceso
+## 9. Late arrivals y reproceso
 
 Las lecturas que llegan fuera de la ventana (reloj desfasado, red recuperada tras un
 corte) no se tiran:
@@ -178,7 +212,7 @@ corte) no se tiran:
   corrección** (`CoilLocationCorrected`), nunca una modificación silenciosa del evento
   original. El log es inmutable: se corrige añadiendo, no editando.
 
-## 9. Cómo se prueba
+## 10. Cómo se prueba
 
 | Nivel | Qué |
 |---|---|
@@ -199,7 +233,7 @@ Los parámetros a barrer experimentalmente, en este orden de importancia:
 3. El umbral de RSSI para "a bordo".
 4. `τ`, la constante de decaimiento de confianza.
 
-## 10. Ampliaciones posibles (fase tardía)
+## 11. Ampliaciones posibles (fase tardía)
 
 - **Odometría de la máquina**: si el simulador publica también la telemetría de
   velocidad, se puede estimar cuánto avanzó entre el último tag de ubicación y el

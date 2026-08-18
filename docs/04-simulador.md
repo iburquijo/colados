@@ -9,13 +9,16 @@ demuestra algo o no.
 **Hace:**
 - Modela la planta física: patio, huecos, tags de ubicación, máquinas, coladas,
   camiones, pedidos.
+- Simula al **operario** de la carretilla, que responde a las preguntas del terminal
+  usando la API pública igual que una persona ([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md)).
 - Simula qué lector de máquina vería qué tags, con qué potencia y cuándo.
 - Aplica un modelo de ruido configurable.
 - Publica `TagReadBatch` y `ReaderStatus` por MQTT.
 - Publica la verdad física por `sim/groundtruth` **solo para evaluación**.
 
 **No hace, nunca:**
-- Conectarse a PostgreSQL ni a la API del backend.
+- Conectarse a PostgreSQL ni a endpoints privilegiados. El agente operario usa **solo la
+  API pública**, la misma que la pantalla real, y **solo responde cuando se le pregunta**.
 - Publicar eventos de dominio (`CoilPlaced`, etc.).
 - Incluir `coilId`, `slotId` o `zoneId` en una lectura.
 - Distinguir en el payload si un EPC es de bobina o de ubicación — **eso lo resuelve el
@@ -54,10 +57,15 @@ flowchart LR
     subgraph INV["Inventario"]
         H["Operario con lector de mano<br/>recorrido periódico"]
     end
+    subgraph OPE["Operario de carretilla"]
+        A["Agente operario<br/>responde al terminal<br/>vía API pública"]
+    end
     C --> Q
     O --> Q
     T --> Q
     Q --> M
+    M --> A
+    A -.->|"confirmaciones"| API["API del backend"]
     M --> RF["Motor RF<br/>¿qué tags ve el lector<br/>embarcado ahora mismo?"]
     H --> RF
 ```
@@ -110,9 +118,13 @@ simulador**, porque cada perilla corresponde a un modo de fallo real del RFID:
 | `tagFailureRate` | 0,001 | Tag de bobina que muere → bobina invisible para siempre |
 | `wrongTagRate` | 0,001 | Etiqueta puesta en la bobina equivocada |
 | `manualErrorRate` | 0,05 | El operario deja la bobina en un hueco distinto al indicado |
+| `operatorConfirmDelayS` | 5–60 | Tarda en contestar al terminal; sigue conduciendo y confirma luego |
+| `operatorRubberStampRate` | 0,10 | **Confirma el destino propuesto sin mirar**, aunque la haya dejado en otro sitio |
+| `operatorIgnoreRate` | 0,05 | No contesta: la pregunta queda pendiente |
+| `operatorMistapRate` | 0,02 | Selecciona el hueco de al lado en la pantalla |
 | `unloggedMoveRate` | 0,01 | Una bobina se mueve con una máquina sin lector → deriva pura |
 
-Cuatro merecen atención especial en esta arquitectura:
+Cinco merecen atención especial en esta arquitectura:
 
 - **`dropDetectionJitterMs`**: ataca directamente al punto débil del diseño. Toda la
   ubicación depende de acertar el instante en que la bobina deja de leerse; desplazarlo
@@ -123,6 +135,11 @@ Cuatro merecen atención especial en esta arquitectura:
 - **`unloggedMoveRate`**: bobina movida sin que ningún lector se entere. **Es
   indetectable hasta el siguiente inventario**, y por eso es la perilla que justifica
   que el inventario exista. Sin ella, el inventario parecería un adorno.
+- **`operatorRubberStampRate`**: produce datos **internamente coherentes y falsos**,
+  porque el sistema recibe una confirmación humana —la fuente que considera más fiable—
+  que es mentira. Solo se detecta cruzándola con la lectura RF o con un inventario
+  posterior. Es el argumento cuantitativo de por qué conviene preguntar poco: **cuanto
+  más preguntas, más se pulsa sin mirar.**
 - **`wrongTagRate`**: el sistema es internamente coherente y aun así miente, porque el
   vínculo físico tag↔bobina es falso. Ningún algoritmo lo detecta desde los datos RFID;
   solo un contraste externo (peso en báscula, inventario) lo descubre. Merece la pena
@@ -157,6 +174,7 @@ Guardados como YAML en `simulator/scenarios/`, ejecutables desde la UI:
 | `dos-carretillas-juntas` | Contaminación cruzada entre máquinas en la misma calle |
 | `error-humano` | Bobina depositada en hueco equivocado → detección de discrepancia |
 | `inventario` | Recorrido completo con lector de mano: confirmaciones, discrepancias y resolución de `LOCATION_UNKNOWN` |
+| `operario-de-piloto-automatico` | `operatorRubberStampRate` al 40 % → confirmaciones falsas coherentes, detectadas solo al cruzarlas con RF |
 | `expedicion` | Pedido completo: reserva → preparación → carga → salida |
 
 Cada escenario es a la vez una demo y un test de aceptación de extremo a extremo.
@@ -173,6 +191,8 @@ consume**) se puede calcular:
   contiguo no es lo mismo que fallar a otra calle.
 - **Latencia de convergencia**: segundos desde el depósito físico hasta que el backend
   lo afirma.
+- **Movimientos resueltos sin preguntar** — la métrica de cabecera
+  ([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md)): mide si el motor mejora.
 - **Tasa de `LOCATION_UNKNOWN`** y cuántos resuelve el inventario.
 - **Deriva acumulada**: cuánto se degrada la precisión entre inventarios. Es **la
   gráfica que resume esta arquitectura**, porque mide exactamente lo que se perdió al

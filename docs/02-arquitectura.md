@@ -2,10 +2,12 @@
 
 ## 1. Principios que ordenan el diseño
 
-1. **El simulador no sabe nada del dominio de negocio.** Emite lecturas crudas de tag
-   por MQTT y punto. No conoce la base de datos, no llama a la API, no dice dónde está
-   nada. Si mañana llega hardware real, se sustituye el simulador y nada más cambia.
-   ([ADR-0006](adr/0006-simulador-emite-solo-lecturas-crudas.md))
+1. **Los sensores simulados no saben nada del dominio.** Los lectores emiten lecturas
+   crudas por MQTT y punto: no conocen la base de datos ni dicen dónde está nada. Si
+   mañana llega hardware real, se sustituyen y nada más cambia
+   ([ADR-0006](adr/0006-simulador-emite-solo-lecturas-crudas.md)). El **operario**
+   simulado es otra cosa: usa la API pública igual que una persona con el terminal
+   ([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md)).
 2. **Los hechos son inmutables; el estado es una opinión derivada.** Las lecturas y
    los eventos de dominio se guardan para siempre; la ubicación actual es una proyección
    recalculable.
@@ -21,13 +23,15 @@
 
 ```mermaid
 flowchart TB
-    OP["Operario de patio<br/>(consulta / resuelve incidencias)"]
+    OP["Operario de carretilla<br/>(terminal en cabina)"]
+    INV["Operario de patio<br/>(inventario con lector de mano)"]
     SUP["Supervisor / Planificación<br/>(stock, expediciones)"]
     SYS["<b>Colados</b><br/>Trazabilidad de bobinas en patio"]
     PLANT["Planta simulada<br/>(lectores RFID virtuales)"]
     ERP["ERP / MES<br/>(fuera de alcance, mockeado)"]
 
-    OP --> SYS
+    OP <-->|"tarea y confirmación<br/>(REST + WS)"| SYS
+    INV --> SYS
     SUP --> SYS
     PLANT -->|"MQTT: lecturas de tag"| SYS
     SYS -.->|"órdenes de producción, pedidos"| ERP
@@ -39,6 +43,7 @@ flowchart TB
 flowchart TB
     subgraph EDGE["Campo (simulado)"]
         SIM["<b>colados-simulator</b><br/>Spring Boot<br/>planta virtual + modelo de ruido"]
+        OPA["agente <b>operario</b><br/>(dentro del simulador)"]
     end
 
     MQ["<b>Mosquitto</b><br/>broker MQTT<br/>QoS 1, LWT"]
@@ -53,10 +58,11 @@ flowchart TB
     end
 
     PG[("<b>PostgreSQL</b><br/>lecturas, observaciones,<br/>log de eventos y proyecciones")]
-    WEB["<b>colados-web</b><br/>Next.js + TypeScript"]
+    WEB["<b>colados-web</b><br/>Next.js + TypeScript<br/>supervisión + terminal de cabina"]
     OBS["Prometheus + Grafana"]
 
     SIM -->|"MQTT: lotes de lectura"| MQ
+    OPA -.->|"REST + WS<br/>(API pública, como una persona)"| M5
     MQ --> M1
     M1 -->|"eventos en proceso"| M2
     M2 -->|"eventos en proceso"| M3
@@ -111,9 +117,14 @@ Esto es lo concreto.
 | `TagReadBatch` | **MQTT** `colados/PLANT-01/reader/+/reads` | simulador (lectores de máquina, portal y mano) | `ingest` | `raw_read`, 7 d |
 | `Observation` | **en proceso** (`ApplicationEventPublisher`) | `ingest` | `tracking` | `observation` |
 | `CoilPickedUp`, `CoilPlaced`… | **en proceso** | `tracking` | `inventory`, `shipping`, `alerting`, `api` | `coil_event` |
+| tarea de movimiento | **WebSocket/STOMP** | `api` | terminal de la máquina | `move_task` |
+| confirmación del operario | **REST** `POST /terminal/{machineId}/confirm` | terminal (o agente operario) | `api` → `tracking` | `coil_event` |
 | cambio de ubicación | **WebSocket/STOMP** | `api` | navegador | — |
 
-**Solo el primer salto es red de verdad.** Los intermedios son llamadas Spring dentro
+**El primero y los dos del terminal son red de verdad.** Y son canales distintos a
+propósito: los sensores hablan MQTT, el terminal habla REST y WebSocket porque es una
+sesión con una persona delante, no telemetría
+([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md)). Los intermedios son llamadas Spring dentro
 del mismo proceso.
 
 Tres propiedades que hay que respetar y que no son gratis solo por ser en proceso:
@@ -183,10 +194,14 @@ lecturas del lector embarcado (bobina transportada + tags de ubicación al pasar
 ubicación con confianza + eventos de dominio
 ```
 
-Los tres eventos que se esperan del sistema —cargada, en tránsito, depositada aquí—
-**son las transiciones de una máquina de estados de dos posiciones**. Lo difícil no es
-el modelo: es decidir el instante exacto de cada transición cuando el tag no desaparece
-de golpe, sino que se desvanece.
+Los dos eventos que se esperan del sistema —cargada y depositada aquí— **son las dos
+transiciones de una máquina de estados de dos posiciones**. Lo difícil no es el modelo:
+es decidir el instante exacto de cada transición cuando el tag no desaparece de golpe,
+sino que se desvanece.
+
+Y cuando ni así está claro, el motor **pregunta al operario** en lugar de inventarse el
+hueco ([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md)). Su objetivo deja de
+ser adivinar y pasa a ser **molestar lo menos posible**.
 
 Detalle completo del algoritmo en
 [`05-resolucion-ubicacion.md`](05-resolucion-ubicacion.md).
@@ -234,7 +249,13 @@ Next.js + TypeScript. Vistas:
 | **Expediciones** | Pedidos, preparación de carga, camión, albarán. |
 | **Alertas** | Invariantes violadas, bobinas en `LOCATION_UNKNOWN`, ubicaciones `STALE`, discrepancias de inventario, lectores caídos. |
 | **Inventario** | Lanzar un recorrido, ver confirmaciones y discrepancias, resolver casos abiertos. |
+| **Terminal de cabina** | Vista aparte, para el operario de la carretilla. Qué lleva encima, adónde va, y la pregunta de "¿dónde la has dejado?" cuando el sistema no lo tiene claro. |
 | **Consola del simulador** | Velocidad de simulación, perillas de ruido, inyección de anomalías. Convierte la demo en algo interactivo. |
+
+El **terminal de cabina** tiene criterios de diseño propios y opuestos a los del resto
+de la aplicación: se usa con guantes, con sol directo y con la máquina en movimiento.
+Botones grandes, contraste alto, una sola decisión por pantalla y nada de tablas. Es un
+ejercicio de diseño distinto y merece la pena hacerlo bien.
 
 La consola del simulador es, para un proyecto de portfolio, la vista más valiosa:
 permite subir el ruido en directo y enseñar cómo el sistema pasa de "ubicación
@@ -252,12 +273,16 @@ Topics de suscripción:
 /topic/coil/{coilId}      eventos de una bobina concreta
 /topic/alerts             alertas
 /topic/sim/status         estado del simulador
+/topic/machine/{id}/task  tarea asignada y preguntas al operario
 ```
 
 ## 9. Observabilidad
 
 Sin esto no se puede razonar sobre un sistema de eventos:
 
+- **Métrica de cabecera**: **porcentaje de movimientos resueltos sin preguntar al
+  operario** ([ADR-0012](adr/0012-terminal-y-gestion-por-excepcion.md)). Es la que dice
+  si el motor de resolución mejora.
 - **Métricas**: lecturas/s por lector, ratio de descarte, profundidad de la cola de
   ingesta, latencia depósito→ubicación resuelta (p50/p95/p99), bobinas en `LOCATION_UNKNOWN` y
   `STALE`, antigüedad media de la última confirmación.
