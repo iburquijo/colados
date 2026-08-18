@@ -109,11 +109,22 @@ Detalle, alternativas descartadas y diagramas C4 en
 definición del problema, la arquitectura y 13 decisiones registradas. Lo siguiente es la
 fase 1 ([`docs/06-roadmap.md`](docs/06-roadmap.md)).
 
+## 7. Arranque local
+
+```bash
+make up      # mosquitto + postgres, espera a que esten healthy
+make smoke   # comprueba que el broker reparte de verdad
+make         # lista el resto de atajos
+```
+
+Detalle de los servicios y qué hacer si no levanta, en
+[`infra/README.md`](infra/README.md).
+
 > **Aviso:** el sistema **no tiene autenticación** y la API está abierta
 > ([ADR-0014](docs/adr/0014-sin-autenticacion.md)). Está pensado para correr en
-> `localhost` con `docker compose up`. No lo despliegues en un servidor accesible sin
+> `localhost` con `make up`. No lo despliegues en un servidor accesible sin
 > añadir antes una capa de autenticación.
 
-## 7. Licencia
+## 8. Licencia
 
 Ver [`LICENSE`](LICENSE).
